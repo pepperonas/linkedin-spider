@@ -1,5 +1,6 @@
 (() => {
   const LOG = '[LC]';
+  const { getCsrfToken, getProfileId, isConnectButton, findNextConnect, findConfirmButton, realClick } = window.LC;
   let active = false;
   let intervalId = null;
   let count = 0;
@@ -34,61 +35,6 @@
   function updateBadge(text, color) {
     badge.textContent = 'LC: ' + text;
     badge.style.background = color || '#333';
-  }
-
-  function getCsrfToken() {
-    const match = document.cookie.match(/JSESSIONID="?([^";]+)/);
-    return match ? match[1] : null;
-  }
-
-  function getProfileId(connectLink) {
-    let el = connectLink;
-    for (let i = 0; i < 20 && el; i++) {
-      const key = el.getAttribute('componentkey');
-      if (key && key.startsWith('SearchResults')) {
-        return key.slice('SearchResults'.length);
-      }
-
-      const urn = el.getAttribute('data-chameleon-result-urn');
-      if (urn && urn.includes('fsd_profile:')) {
-        return urn.split('fsd_profile:')[1];
-      }
-
-      el = el.parentElement;
-    }
-    return null;
-  }
-
-  function isConnectButton(el) {
-    const text = el.textContent.trim();
-    // Must be "Vernetzen" or "Connect", NOT "Ausstehend", "Nachricht", "Folgen" etc.
-    if (text === 'Vernetzen' || text === 'Connect') return true;
-    return false;
-  }
-
-  function findNextConnect() {
-    // Strategy 1: data-view-name attribute
-    const dvn = document.querySelectorAll('[data-view-name="edge-creation-connect-action"] a, [data-view-name="edge-creation-connect-action"] button');
-    for (const el of dvn) {
-      if (!isConnectButton(el)) continue;
-      if (el.closest('[role="dialog"], .artdeco-modal, dialog')) continue;
-      // Check by profile ID instead of data attribute (survives DOM replacement)
-      const pid = getProfileId(el);
-      if (pid && processedProfiles.has(pid)) continue;
-      return el;
-    }
-
-    // Strategy 2: Find buttons/links by visible text "Vernetzen"/"Connect"
-    const candidates = document.querySelectorAll('button, a');
-    for (const el of candidates) {
-      if (!isConnectButton(el)) continue;
-      if (el.closest('[role="dialog"], .artdeco-modal, dialog')) continue;
-      const pid = getProfileId(el);
-      if (pid && processedProfiles.has(pid)) continue;
-      return el;
-    }
-
-    return null;
   }
 
   async function sendInvitation(profileId, name) {
@@ -134,32 +80,6 @@
       console.log(LOG, 'Invitation error:', err.message);
       return 'error';
     }
-  }
-
-  function realClick(el) {
-    ['mousedown', 'mouseup', 'click'].forEach(type => {
-      el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
-    });
-  }
-
-  function findConfirmButton() {
-    const modals = document.querySelectorAll('[role="dialog"], .artdeco-modal, dialog');
-    for (const modal of modals) {
-      const exact = modal.querySelector('button[aria-label="Ohne Notiz senden"], button[aria-label="Send without a note"]');
-      if (exact) return exact;
-
-      const buttons = modal.querySelectorAll('button');
-      for (const btn of buttons) {
-        const text = btn.textContent.trim();
-        if (text === 'Ohne Notiz senden' || text === 'Send without a note') return btn;
-      }
-
-      if (modal.classList.contains('send-invite') || modal.querySelector('.send-invite')) {
-        const primary = modal.querySelector('.artdeco-button--primary');
-        if (primary) return primary;
-      }
-    }
-    return null;
   }
 
   async function clickFallback(connectLink, name) {
@@ -218,7 +138,7 @@
       return;
     }
 
-    const connectLink = findNextConnect();
+    const connectLink = findNextConnect(processedProfiles);
     if (!connectLink) {
       updateBadge('Aktiv - keine Buttons', '#555');
       return;

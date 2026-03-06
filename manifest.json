@@ -7,7 +7,7 @@
   "content_scripts": [
     {
       "matches": ["*://*.linkedin.com/*"],
-      "js": ["content.js"],
+      "js": ["lib.js", "content.js"],
       "run_at": "document_idle"
     }
   ],

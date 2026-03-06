@@ -1,0 +1,41 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run test:ci
+
+      - name: Build ZIP
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          mkdir -p dist
+          zip "dist/linkedin-auto-connect-${TAG_NAME}.zip" \
+            manifest.json lib.js content.js popup.html popup.js styles.css icon.png
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG_NAME" \
+            "dist/linkedin-auto-connect-${TAG_NAME}.zip" \
+            --title "LinkedIn Auto-Connect ${TAG_NAME}" \
+            --generate-notes

@@ -1,0 +1,13 @@
+{
+  "private": true,
+  "name": "linkedin-auto-connect",
+  "version": "2.2.0",
+  "scripts": {
+    "test": "vitest run",
+    "test:ci": "vitest run --reporter=verbose"
+  },
+  "devDependencies": {
+    "vitest": "^3.0.0",
+    "jsdom": "^25.0.0"
+  }
+}
