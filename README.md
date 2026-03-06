@@ -2,18 +2,21 @@
 
 Chrome Extension (Manifest V3) zum automatischen Versenden von Kontaktanfragen auf LinkedIn-Suchergebnisseiten.
 
-**Version:** 2.1.0
+**Version:** 2.2.0
 
 ## Funktionsweise
 
-Die Extension scannt LinkedIn-Suchergebnisse nach "Vernetzen"-Buttons und sendet Kontaktanfragen direkt über die LinkedIn Voyager API. Buttons werden nicht geklickt, sondern die Profil-URN wird aus dem DOM extrahiert und per `fetch()` gesendet.
+Die Extension scannt LinkedIn-Suchergebnisse nach "Vernetzen"-Buttons und sendet Kontaktanfragen direkt über die LinkedIn Voyager API. Falls die API fehlschlägt (aber kein Rate-Limit), wird automatisch ein Click-Fallback verwendet.
 
 **Technische Details:**
-- Erkennt Buttons über `data-view-name="edge-creation-connect-action"` und `aria-label$="einladen"`
-- Extrahiert Profil-ID aus `componentkey`-Attribut im DOM-Baum
+- 3-stufige Button-Erkennung: `data-view-name`-Attribut, Textsuche ("Vernetzen"/"Connect"), `aria-label`-Matching
+- Profil-ID-Extraktion aus `componentkey`-Attribut im DOM-Baum
 - API-Aufruf an `/voyager/api/voyagerRelationshipsDashMemberRelationships`
+- Click-Fallback mit `realClick()` (mousedown/mouseup/click Events) wenn API fehlschlägt
 - Rate-Limiting: 1 Anfrage alle 1,5 Sekunden
+- Automatische 60s-Pause bei LinkedIn 429 Rate-Limit
 - CSRF-Token aus `JSESSIONID`-Cookie
+- Profil-ID-basiertes Tracking verhindert doppelte Verarbeitung nach DOM-Ersetzung
 
 ## Features
 
@@ -21,8 +24,11 @@ Die Extension scannt LinkedIn-Suchergebnisse nach "Vernetzen"-Buttons und sendet
 - Anfragen-Zähler (persistent in `chrome.storage`)
 - Counter zurücksetzen
 - Visuelles Status-Badge (unten rechts auf der Seite)
-- Verarbeitete Buttons werden als "Gesendet" markiert (opacity 0.5)
+- Verarbeitete Buttons werden ausgegraut (opacity 0.5)
 - Echtzeit-Statusanzeige im Badge
+- Automatische Rate-Limit-Erkennung mit 60s Pause
+- Click-Fallback erkennt "Ausstehend"-Statuswechsel als Erfolg
+- DOM-Scan beim Laden (Debug-Output in Console)
 
 ## Installation
 
@@ -44,12 +50,13 @@ Die Extension scannt LinkedIn-Suchergebnisse nach "Vernetzen"-Buttons und sendet
 - "LC: Aktiv (X gesendet)" (grün) — Läuft, X Anfragen versendet
 - "LC: Sende an Name..." (LinkedIn-Blau) — Anfrage wird gerade gesendet
 - "LC: #X Name" (dunkelgrün) — Erfolgreiche Anfrage
+- "LC: Rate-Limit! 60s Pause..." (rot) — LinkedIn 429, wartet automatisch
 - "LC: Fehler XXX" (rot) — API-Fehler
 
 ## Dateien
 
 - `manifest.json` — Chrome Extension Manifest V3
-- `content.js` — Kernlogik: DOM-Scanning, API-Calls, Badge
+- `content.js` — Kernlogik: DOM-Scanning, API-Calls, Click-Fallback, Badge
 - `popup.html` — Popup-UI mit Toggle und Counter
 - `popup.js` — Popup-Logik und Messaging
 - `styles.css` — Popup-Styling
@@ -61,7 +68,7 @@ Die Extension scannt LinkedIn-Suchergebnisse nach "Vernetzen"-Buttons und sendet
 - Content Script läuft bei `document_idle`
 - Bei Reload der LinkedIn-Seite bleibt der AN/AUS-Status erhalten
 - Counter wird in `chrome.storage.local` gespeichert
-- Bereits verarbeitete Buttons werden mit `data-lc-processed="true"` markiert
+- Bereits verarbeitete Profile werden per Set im Speicher getrackt (überlebt DOM-Ersetzung durch LinkedIn)
 - Modals werden automatisch übersprungen (kein Versand bei Buttons in Dialogen)
 
 ## Sicherheit

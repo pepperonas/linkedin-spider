@@ -4,10 +4,25 @@
   let intervalId = null;
   let count = 0;
   let pending = false;
-
-  const API_URL = '/voyager/api/voyagerRelationshipsDashMemberRelationships?action=verifyQuotaAndCreateV2&decorationId=com.linkedin.voyager.dash.deco.relationships.InvitationCreationResultWithInvitee-2';
+  let rateLimited = false;
+  const processedProfiles = new Set();
 
   console.log(LOG, 'Content script loaded on', location.href);
+
+  // Initial DOM scan for debugging
+  setTimeout(() => {
+    const allButtons = document.querySelectorAll('button, a');
+    const connectish = [];
+    for (const el of allButtons) {
+      const text = el.textContent.trim();
+      if (text === 'Vernetzen' || text === 'Connect') {
+        connectish.push({ tag: el.tagName, text, aria: el.getAttribute('aria-label'), classes: el.className.substring(0, 80) });
+      }
+    }
+    console.log(LOG, 'DOM scan: found', connectish.length, '"Vernetzen"/"Connect" buttons:', connectish);
+    const dvn = document.querySelectorAll('[data-view-name="edge-creation-connect-action"]');
+    console.log(LOG, 'DOM scan: found', dvn.length, 'elements with data-view-name="edge-creation-connect-action"');
+  }, 2000);
 
   // Visual debug badge
   const badge = document.createElement('div');
@@ -28,28 +43,51 @@
 
   function getProfileId(connectLink) {
     let el = connectLink;
-    for (let i = 0; i < 15 && el; i++) {
+    for (let i = 0; i < 20 && el; i++) {
       const key = el.getAttribute('componentkey');
       if (key && key.startsWith('SearchResults')) {
         return key.slice('SearchResults'.length);
       }
+
+      const urn = el.getAttribute('data-chameleon-result-urn');
+      if (urn && urn.includes('fsd_profile:')) {
+        return urn.split('fsd_profile:')[1];
+      }
+
       el = el.parentElement;
     }
     return null;
   }
 
+  function isConnectButton(el) {
+    const text = el.textContent.trim();
+    // Must be "Vernetzen" or "Connect", NOT "Ausstehend", "Nachricht", "Folgen" etc.
+    if (text === 'Vernetzen' || text === 'Connect') return true;
+    return false;
+  }
+
   function findNextConnect() {
-    const links = document.querySelectorAll('[data-view-name="edge-creation-connect-action"] a');
-    for (const a of links) {
-      if (a.dataset.lcProcessed) continue;
-      return a;
+    // Strategy 1: data-view-name attribute
+    const dvn = document.querySelectorAll('[data-view-name="edge-creation-connect-action"] a, [data-view-name="edge-creation-connect-action"] button');
+    for (const el of dvn) {
+      if (!isConnectButton(el)) continue;
+      if (el.closest('[role="dialog"], .artdeco-modal, dialog')) continue;
+      // Check by profile ID instead of data attribute (survives DOM replacement)
+      const pid = getProfileId(el);
+      if (pid && processedProfiles.has(pid)) continue;
+      return el;
     }
-    const inviteLinks = document.querySelectorAll('a[aria-label$="einladen"]');
-    for (const a of inviteLinks) {
-      if (a.dataset.lcProcessed) continue;
-      if (a.closest('[role="dialog"], .artdeco-modal, dialog')) continue;
-      return a;
+
+    // Strategy 2: Find buttons/links by visible text "Vernetzen"/"Connect"
+    const candidates = document.querySelectorAll('button, a');
+    for (const el of candidates) {
+      if (!isConnectButton(el)) continue;
+      if (el.closest('[role="dialog"], .artdeco-modal, dialog')) continue;
+      const pid = getProfileId(el);
+      if (pid && processedProfiles.has(pid)) continue;
+      return el;
     }
+
     return null;
   }
 
@@ -58,7 +96,7 @@
     if (!csrf) {
       console.log(LOG, 'No CSRF token found');
       updateBadge('Kein CSRF Token!', '#c00');
-      return false;
+      return 'error';
     }
 
     const urn = 'urn:li:fsd_profile:' + profileId;
@@ -66,7 +104,7 @@
     updateBadge('Sende an ' + name.substring(0, 20) + '...', '#0a66c2');
 
     try {
-      const resp = await fetch(API_URL, {
+      const resp = await fetch('/voyager/api/voyagerRelationshipsDashMemberRelationships?action=verifyQuotaAndCreateV2&decorationId=com.linkedin.voyager.dash.deco.relationships.InvitationCreationResultWithInvitee-2', {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -85,53 +123,151 @@
 
       if (resp.ok) {
         console.log(LOG, 'Invitation sent to', name);
-        updateBadge('#' + (count + 1) + ' ' + name.substring(0, 20), '#2e7d32');
-        return true;
+        return 'ok';
       } else {
         const text = await resp.text().catch(() => '');
         console.log(LOG, 'Invitation failed:', resp.status, text.substring(0, 200));
-        updateBadge('Fehler ' + resp.status, '#c00');
-        return false;
+        if (resp.status === 429) return 'rate_limited';
+        return 'error';
       }
     } catch (err) {
       console.log(LOG, 'Invitation error:', err.message);
-      updateBadge('Fehler: ' + err.message.substring(0, 30), '#c00');
-      return false;
+      return 'error';
     }
+  }
+
+  function realClick(el) {
+    ['mousedown', 'mouseup', 'click'].forEach(type => {
+      el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+    });
+  }
+
+  function findConfirmButton() {
+    const modals = document.querySelectorAll('[role="dialog"], .artdeco-modal, dialog');
+    for (const modal of modals) {
+      const exact = modal.querySelector('button[aria-label="Ohne Notiz senden"], button[aria-label="Send without a note"]');
+      if (exact) return exact;
+
+      const buttons = modal.querySelectorAll('button');
+      for (const btn of buttons) {
+        const text = btn.textContent.trim();
+        if (text === 'Ohne Notiz senden' || text === 'Send without a note') return btn;
+      }
+
+      if (modal.classList.contains('send-invite') || modal.querySelector('.send-invite')) {
+        const primary = modal.querySelector('.artdeco-button--primary');
+        if (primary) return primary;
+      }
+    }
+    return null;
+  }
+
+  async function clickFallback(connectLink, name) {
+    console.log(LOG, 'Using click fallback for', name);
+    updateBadge('Klicke ' + name.substring(0, 20) + '...', '#0a66c2');
+    realClick(connectLink);
+
+    // Wait for either: confirm dialog, or button text change to "Ausstehend"/"Pending"
+    for (let attempt = 0; attempt < 10; attempt++) {
+      await new Promise(r => setTimeout(r, 300));
+
+      // Check for confirm dialog
+      const confirmBtn = findConfirmButton();
+      if (confirmBtn) {
+        console.log(LOG, 'Found confirm button, clicking');
+        realClick(confirmBtn);
+        return true;
+      }
+
+      // Check if button changed to "Ausstehend"/"Pending" (= success without dialog)
+      const newText = connectLink.textContent.trim();
+      if (newText.includes('Ausstehend') || newText.includes('Pending')) {
+        console.log(LOG, 'Button changed to "Ausstehend" — invitation sent!');
+        return true;
+      }
+
+      // Also check if parent container now shows "Ausstehend"
+      const parent = connectLink.closest('[data-view-name="edge-creation-connect-action"]');
+      if (parent) {
+        const parentText = parent.textContent.trim();
+        if (parentText.includes('Ausstehend') || parentText.includes('Pending')) {
+          console.log(LOG, 'Container changed to "Ausstehend" — invitation sent!');
+          return true;
+        }
+      }
+    }
+
+    console.log(LOG, 'No confirm dialog or state change for', name);
+    updateBadge('Kein Dialog: ' + name.substring(0, 20), '#c00');
+    return false;
   }
 
   async function tick() {
     if (!active || pending) return;
 
+    if (rateLimited) {
+      updateBadge('Rate-Limit! Warte...', '#c00');
+      return;
+    }
+
+    // First: check if there's an open confirm dialog to handle
+    const confirmBtn = findConfirmButton();
+    if (confirmBtn) {
+      console.log(LOG, 'Found open confirm dialog, clicking');
+      realClick(confirmBtn);
+      return;
+    }
+
     const connectLink = findNextConnect();
     if (!connectLink) {
-      console.log(LOG, 'No connect buttons found this tick');
       updateBadge('Aktiv - keine Buttons', '#555');
       return;
     }
 
-    const name = connectLink.getAttribute('aria-label') || 'Unknown';
+    const name = connectLink.getAttribute('aria-label') || connectLink.textContent.trim() || 'Unknown';
     const profileId = getProfileId(connectLink);
 
-    connectLink.dataset.lcProcessed = 'true';
-
-    if (!profileId) {
-      console.log(LOG, 'Could not find profile ID for', name);
-      updateBadge('Keine Profil-ID: ' + name.substring(0, 20), '#c00');
-      return;
-    }
+    // Track by profile ID to survive DOM replacement
+    if (profileId) processedProfiles.add(profileId);
 
     pending = true;
-    const ok = await sendInvitation(profileId, name);
+    let ok = false;
+
+    if (profileId) {
+      console.log(LOG, 'Found profileId:', profileId, 'for', name);
+      const result = await sendInvitation(profileId, name);
+
+      if (result === 'ok') {
+        ok = true;
+      } else if (result === 'rate_limited') {
+        console.log(LOG, 'Rate limited by LinkedIn! Pausing for 60s...');
+        updateBadge('Rate-Limit! 60s Pause...', '#c00');
+        rateLimited = true;
+        setTimeout(() => {
+          rateLimited = false;
+          console.log(LOG, 'Rate limit pause ended, resuming');
+          updateBadge('Aktiv (' + count + ' gesendet)', '#2e7d32');
+        }, 60000);
+        pending = false;
+        return;
+      } else {
+        // API error (not rate limit) — try click fallback
+        console.log(LOG, 'API failed, trying click fallback');
+        ok = await clickFallback(connectLink, name);
+      }
+    } else {
+      console.log(LOG, 'No profile ID found, using click fallback for', name);
+      ok = await clickFallback(connectLink, name);
+    }
+
     pending = false;
 
     if (ok) {
       count++;
       chrome.storage.local.set({ lcCount: count });
       console.log(LOG, 'Request #' + count + ' sent to', name);
+      updateBadge('#' + count + ' ' + name.substring(0, 20), '#2e7d32');
 
-      const span = connectLink.querySelector('span');
-      if (span) span.textContent = 'Gesendet';
       connectLink.style.opacity = '0.5';
       connectLink.style.pointerEvents = 'none';
     }
@@ -141,6 +277,7 @@
     if (intervalId) return;
     active = true;
     pending = false;
+    rateLimited = false;
     intervalId = setInterval(tick, 1500);
     updateBadge('Aktiv (' + count + ' gesendet)', '#2e7d32');
     console.log(LOG, 'Started - scanning every 1.5s');
