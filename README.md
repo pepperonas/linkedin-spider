@@ -1,11 +1,17 @@
 <p align="center">
-  <img src="icon.png" alt="LinkedIn Auto-Connect" width="128" height="128">
+  <img src="thumbnail.png" alt="LinkedIn Spider" width="600">
 </p>
 
-<h1 align="center">LinkedIn Auto-Connect</h1>
+<h1 align="center">LinkedIn Spider</h1>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.2.0-blue?style=flat-square" alt="Version">
+  <a href="README.md"><img src="https://img.shields.io/badge/%F0%9F%87%A9%F0%9F%87%AA_Deutsch-Dokumentation-black?style=for-the-badge" alt="Deutsch"></a>
+  &nbsp;&nbsp;
+  <a href="README_EN.md"><img src="https://img.shields.io/badge/%F0%9F%87%AC%F0%9F%87%A7_English-Documentation-black?style=for-the-badge" alt="English"></a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/version-2.3.0-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/manifest-v3-green?style=flat-square&logo=googlechrome&logoColor=white" alt="Manifest V3">
   <img src="https://img.shields.io/badge/platform-Chrome-yellow?style=flat-square&logo=googlechrome&logoColor=white" alt="Chrome">
   <img src="https://img.shields.io/badge/language-JavaScript-F7DF1E?style=flat-square&logo=javascript&logoColor=black" alt="JavaScript">
@@ -83,11 +89,29 @@ Die Extension scannt LinkedIn-Suchergebnisse nach "Vernetzen"-Buttons und sendet
 ## Dateien
 
 - `manifest.json` — Chrome Extension Manifest V3
-- `content.js` — Kernlogik: DOM-Scanning, API-Calls, Click-Fallback, Badge
+- `lib.js` — Extrahierte, testbare Kernfunktionen (DOM-Selektoren, Click-Events)
+- `content.js` — Hauptlogik: DOM-Scanning, API-Calls, Click-Fallback, Badge
 - `popup.html` — Popup-UI mit Toggle und Counter
 - `popup.js` — Popup-Logik und Messaging
 - `styles.css` — Popup-Styling
 - `icon.png` — Extension-Icon
+
+## Tests
+
+```bash
+npm install
+npm test
+```
+
+40 Unit- und Integrationstests mit Vitest + jsdom:
+- `test/lib.test.js` — Tests für alle extrahierten Kernfunktionen
+- `test/content.test.js` — Integrationstests für Message-Handling und DOM-Interaktion
+- `test/popup.test.js` — Popup-UI und Chrome-API-Tests
+
+## CI/CD
+
+- **Tests** — Laufen automatisch bei Push auf `main` und bei Pull Requests
+- **Release** — Bei Push eines `v*`-Tags werden Tests ausgeführt und ein GitHub Release mit ZIP erstellt
 
 ## Hinweise
 
