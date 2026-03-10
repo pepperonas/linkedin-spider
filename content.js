@@ -29,11 +29,11 @@
   const badge = document.createElement('div');
   badge.id = 'lc-badge';
   badge.style.cssText = 'position:fixed;bottom:10px;right:10px;z-index:99999;background:#333;color:#fff;padding:6px 12px;border-radius:8px;font:12px sans-serif;opacity:0.9;pointer-events:none;transition:background 0.3s';
-  badge.textContent = 'LC: bereit';
+  badge.textContent = '\uD83D\uDD78\uFE0F bereit';
   document.body.appendChild(badge);
 
   function updateBadge(text, color) {
-    badge.textContent = 'LC: ' + text;
+    badge.textContent = '\uD83D\uDD78\uFE0F ' + text;
     badge.style.background = color || '#333';
   }
 
@@ -41,13 +41,13 @@
     const csrf = getCsrfToken();
     if (!csrf) {
       console.log(LOG, 'No CSRF token found');
-      updateBadge('Kein CSRF Token!', '#c00');
+      updateBadge('\u274C Kein CSRF Token!', '#c00');
       return 'error';
     }
 
     const urn = 'urn:li:fsd_profile:' + profileId;
     console.log(LOG, 'Sending invitation to', name, '(' + urn + ')');
-    updateBadge('Sende an ' + name.substring(0, 20) + '...', '#0a66c2');
+    updateBadge('\u23F3 ' + name.substring(0, 20) + '...', '#0a66c2');
 
     try {
       const resp = await fetch('/voyager/api/voyagerRelationshipsDashMemberRelationships?action=verifyQuotaAndCreateV2&decorationId=com.linkedin.voyager.dash.deco.relationships.InvitationCreationResultWithInvitee-2', {
@@ -84,7 +84,7 @@
 
   async function clickFallback(connectLink, name) {
     console.log(LOG, 'Using click fallback for', name);
-    updateBadge('Klicke ' + name.substring(0, 20) + '...', '#0a66c2');
+    updateBadge('\u23F3 ' + name.substring(0, 20) + '...', '#0a66c2');
     realClick(connectLink);
 
     // Wait for either: confirm dialog, or button text change to "Ausstehend"/"Pending"
@@ -118,7 +118,7 @@
     }
 
     console.log(LOG, 'No confirm dialog or state change for', name);
-    updateBadge('Kein Dialog: ' + name.substring(0, 20), '#c00');
+    updateBadge('\u274C ' + name.substring(0, 20), '#c00');
     return false;
   }
 
@@ -126,7 +126,7 @@
     if (!active || pending) return;
 
     if (rateLimited) {
-      updateBadge('Rate-Limit! Warte...', '#c00');
+      updateBadge('\u274C Rate-Limit! Warte...', '#c00');
       return;
     }
 
@@ -140,7 +140,7 @@
 
     const connectLink = findNextConnect(processedProfiles);
     if (!connectLink) {
-      updateBadge('Aktiv - keine Buttons', '#555');
+      updateBadge('\u2705 Aktiv - keine Buttons', '#555');
       return;
     }
 
@@ -161,12 +161,12 @@
         ok = true;
       } else if (result === 'rate_limited') {
         console.log(LOG, 'Rate limited by LinkedIn! Pausing for 60s...');
-        updateBadge('Rate-Limit! 60s Pause...', '#c00');
+        updateBadge('\u274C Rate-Limit! 60s Pause...', '#c00');
         rateLimited = true;
         setTimeout(() => {
           rateLimited = false;
           console.log(LOG, 'Rate limit pause ended, resuming');
-          updateBadge('Aktiv (' + count + ' gesendet)', '#2e7d32');
+          updateBadge('\u2705 Aktiv (' + count + ' gesendet)', '#2e7d32');
         }, 60000);
         pending = false;
         return;
@@ -186,7 +186,7 @@
       count++;
       chrome.storage.local.set({ lcCount: count });
       console.log(LOG, 'Request #' + count + ' sent to', name);
-      updateBadge('#' + count + ' ' + name.substring(0, 20), '#2e7d32');
+      updateBadge('\u2705 #' + count + ' ' + name.substring(0, 20), '#2e7d32');
 
       connectLink.style.opacity = '0.5';
       connectLink.style.pointerEvents = 'none';
@@ -199,7 +199,7 @@
     pending = false;
     rateLimited = false;
     intervalId = setInterval(tick, 1500);
-    updateBadge('Aktiv (' + count + ' gesendet)', '#2e7d32');
+    updateBadge('\u2705 Aktiv (' + count + ' gesendet)', '#2e7d32');
     console.log(LOG, 'Started - scanning every 1.5s');
   }
 
@@ -210,7 +210,7 @@
       clearInterval(intervalId);
       intervalId = null;
     }
-    updateBadge('Pausiert (' + count + ' gesendet)', '#333');
+    updateBadge('\u274C Pausiert (' + count + ' gesendet)', '#333');
     console.log(LOG, 'Stopped');
   }
 
