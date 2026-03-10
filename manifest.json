@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "LinkedIn Auto-Connect",
+  "name": "LinkedIn Spider",
   "version": "2.2.0",
   "description": "Automatically send connection requests on LinkedIn search results",
   "permissions": ["activeTab", "storage"],

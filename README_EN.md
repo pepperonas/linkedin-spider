@@ -34,6 +34,10 @@
 </p>
 
 <p align="center">
+  <a href="https://www.paypal.com/donate/?business=martinpaush@gmail.com&currency_code=EUR"><img src="https://img.shields.io/badge/Sponsor_this_project-PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate via PayPal"></a>
+</p>
+
+<p align="center">
   Chrome Extension (Manifest V3) that automatically sends connection requests on LinkedIn search result pages.
 </p>
 
@@ -65,11 +69,26 @@ The extension scans LinkedIn search results for "Connect" buttons and sends conn
 
 ## Installation
 
-1. Clone or download this repository
-2. Open Chrome: `chrome://extensions`
-3. Enable "Developer mode" (top right)
-4. Click "Load unpacked"
-5. Select the project folder
+### Option 1: Download (recommended)
+
+1. **[Download latest release](https://github.com/pepperonas/linkedin-spider/releases/latest)** — ZIP file under "Assets"
+2. Unzip — this creates a `linkedin-spider` folder
+3. Open Chrome and navigate to `chrome://extensions`
+4. Enable **Developer mode** (toggle in top right)
+5. Click **"Load unpacked"**
+6. Select the unzipped `linkedin-spider` folder
+7. The extension appears in the Chrome toolbar
+
+### Option 2: Clone repository
+
+```bash
+git clone https://github.com/pepperonas/linkedin-spider.git
+```
+
+1. Open Chrome: `chrome://extensions`
+2. Enable "Developer mode" (top right)
+3. Click "Load unpacked"
+4. Select the cloned folder
 
 ## Usage
 

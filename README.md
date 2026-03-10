@@ -34,6 +34,10 @@
 </p>
 
 <p align="center">
+  <a href="https://www.paypal.com/donate/?business=martinpaush@gmail.com&currency_code=EUR"><img src="https://img.shields.io/badge/Sponsor_this_project-PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate via PayPal"></a>
+</p>
+
+<p align="center">
   Chrome Extension (Manifest V3) zum automatischen Versenden von Kontaktanfragen auf LinkedIn-Suchergebnisseiten.
 </p>
 
@@ -65,11 +69,26 @@ Die Extension scannt LinkedIn-Suchergebnisse nach "Vernetzen"-Buttons und sendet
 
 ## Installation
 
-1. Repository klonen oder herunterladen
-2. Chrome öffnen: `chrome://extensions`
-3. "Entwicklermodus" aktivieren (oben rechts)
-4. "Entpackte Erweiterung laden" klicken
-5. Projektordner auswählen
+### Option 1: Download (empfohlen)
+
+1. **[Neueste Version herunterladen](https://github.com/pepperonas/linkedin-spider/releases/latest)** — ZIP-Datei unter "Assets"
+2. ZIP entpacken — es entsteht ein Ordner `linkedin-spider`
+3. Chrome öffnen und `chrome://extensions` in die Adressleiste eingeben
+4. **Entwicklermodus** aktivieren (Schalter oben rechts)
+5. **"Entpackte Erweiterung laden"** klicken
+6. Den entpackten `linkedin-spider`-Ordner auswählen
+7. Die Extension erscheint in der Chrome-Toolbar
+
+### Option 2: Repository klonen
+
+```bash
+git clone https://github.com/pepperonas/linkedin-spider.git
+```
+
+1. Chrome öffnen: `chrome://extensions`
+2. "Entwicklermodus" aktivieren (oben rechts)
+3. "Entpackte Erweiterung laden" klicken
+4. Den geklonten Ordner auswählen
 
 ## Verwendung
 
