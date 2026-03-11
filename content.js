@@ -188,8 +188,12 @@
       console.log(LOG, 'Request #' + count + ' sent to', name);
       updateBadge('\u2705 #' + count + ' ' + name.substring(0, 20), '#2e7d32');
 
-      connectLink.style.opacity = '0.5';
-      connectLink.style.pointerEvents = 'none';
+      // Replace button with 🍻 emoji
+      const emojiSpan = document.createElement('span');
+      emojiSpan.textContent = '🍻';
+      emojiSpan.style.cssText = 'font-size:20px;cursor:default;';
+      emojiSpan.setAttribute('data-lc-processed', 'true');
+      connectLink.replaceWith(emojiSpan);
     }
   }
 
