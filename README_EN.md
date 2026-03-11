@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.4.0-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.5.0-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/manifest-v3-green?style=flat-square&logo=googlechrome&logoColor=white" alt="Manifest V3">
   <img src="https://img.shields.io/badge/platform-Chrome-yellow?style=flat-square&logo=googlechrome&logoColor=white" alt="Chrome">
   <img src="https://img.shields.io/badge/language-JavaScript-F7DF1E?style=flat-square&logo=javascript&logoColor=black" alt="JavaScript">
@@ -61,7 +61,7 @@ The extension scans LinkedIn search results for "Connect" buttons and sends conn
 - Request counter (persistent in `chrome.storage`)
 - Reset counter
 - Visual status badge (bottom right on page)
-- Processed buttons are greyed out (opacity 0.5)
+- Successful connections are marked with a 🍻 emoji
 - Real-time status display in badge
 - Automatic rate limit detection with 60s pause
 - Click fallback detects "Pending" status change as success

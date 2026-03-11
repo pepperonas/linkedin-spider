@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.4.0-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.5.0-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/manifest-v3-green?style=flat-square&logo=googlechrome&logoColor=white" alt="Manifest V3">
   <img src="https://img.shields.io/badge/platform-Chrome-yellow?style=flat-square&logo=googlechrome&logoColor=white" alt="Chrome">
   <img src="https://img.shields.io/badge/language-JavaScript-F7DF1E?style=flat-square&logo=javascript&logoColor=black" alt="JavaScript">
@@ -61,7 +61,7 @@ Die Extension scannt LinkedIn-Suchergebnisse nach "Vernetzen"-Buttons und sendet
 - Anfragen-Zähler (persistent in `chrome.storage`)
 - Counter zurücksetzen
 - Visuelles Status-Badge (unten rechts auf der Seite)
-- Verarbeitete Buttons werden ausgegraut (opacity 0.5)
+- Erfolgreiche Vernetzungen werden mit 🍻-Emoji markiert
 - Echtzeit-Statusanzeige im Badge
 - Automatische Rate-Limit-Erkennung mit 60s Pause
 - Click-Fallback erkennt "Ausstehend"-Statuswechsel als Erfolg
