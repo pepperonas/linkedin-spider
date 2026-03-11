@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.5.0-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.6.0-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/manifest-v3-green?style=flat-square&logo=googlechrome&logoColor=white" alt="Manifest V3">
   <img src="https://img.shields.io/badge/platform-Chrome-yellow?style=flat-square&logo=googlechrome&logoColor=white" alt="Chrome">
   <img src="https://img.shields.io/badge/language-JavaScript-F7DF1E?style=flat-square&logo=javascript&logoColor=black" alt="JavaScript">
@@ -98,12 +98,12 @@ git clone https://github.com/pepperonas/linkedin-spider.git
 4. The badge in the bottom right shows progress in real time
 
 **Status Badge:**
-- "LC: bereit" (grey) — Extension loaded, inactive
-- "LC: Aktiv (X gesendet)" (green) — Running, X requests sent
-- "LC: Sende an Name..." (LinkedIn blue) — Request being sent
-- "LC: #X Name" (dark green) — Successful request
-- "LC: Rate-Limit! 60s Pause..." (red) — LinkedIn 429, waiting automatically
-- "LC: Fehler XXX" (red) — API error
+- "🕸️ ready" (grey) — Extension loaded, inactive
+- "🕸️ Active (X sent)" (green) — Running, X requests sent
+- "🕸️ ⏳ Name..." (LinkedIn blue) — Request being sent
+- "🕸️ ✅ #X Name" (dark green) — Successful request
+- "🕸️ ❌ Rate-Limit! 60s pause..." (red) — LinkedIn 429, waiting automatically
+- "🕸️ ❌ No CSRF Token!" (red) — API error
 
 ## Files
 
