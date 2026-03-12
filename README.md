@@ -2,7 +2,7 @@
   <img src="thumbnail.png" alt="LinkedIn Spider" width="600">
 </p>
 
-<h1 align="center">LinkedIn Spider</h1>
+<h1 align="center">LinkedIn Spider 🍻</h1>
 
 <p align="center">
   <a href="README.md"><img src="https://img.shields.io/badge/%F0%9F%87%A9%F0%9F%87%AA_Deutsch-Dokumentation-black?style=for-the-badge" alt="Deutsch"></a>
