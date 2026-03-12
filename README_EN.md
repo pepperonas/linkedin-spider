@@ -144,3 +144,11 @@ npm test
 ## Security
 
 The CSRF token is automatically extracted from the session cookie. API calls use `credentials: 'include'` and send the `csrf-token` header according to the LinkedIn Voyager protocol.
+
+## Developer
+
+**Martin Pfeffer** — [celox.io](https://celox.io)
+
+## License
+
+MIT — see [LICENSE](LICENSE)
