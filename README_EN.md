@@ -11,14 +11,16 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.6.0-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.7.0-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/manifest-v3-green?style=flat-square&logo=googlechrome&logoColor=white" alt="Manifest V3">
+  <img src="https://img.shields.io/badge/world-MAIN_%2B_ISOLATED-8957e5?style=flat-square" alt="MAIN + ISOLATED world">
   <img src="https://img.shields.io/badge/platform-Chrome-yellow?style=flat-square&logo=googlechrome&logoColor=white" alt="Chrome">
   <img src="https://img.shields.io/badge/language-JavaScript-F7DF1E?style=flat-square&logo=javascript&logoColor=black" alt="JavaScript">
   <img src="https://img.shields.io/github/license/pepperonas/linkedin-spider?style=flat-square" alt="License">
 </p>
 
 <p align="center">
+  <img src="https://img.shields.io/github/actions/workflow/status/pepperonas/linkedin-spider/test.yml?branch=main&label=tests&style=flat-square&logo=github" alt="CI">
   <img src="https://img.shields.io/github/last-commit/pepperonas/linkedin-spider?style=flat-square&color=purple" alt="Last Commit">
   <img src="https://img.shields.io/github/repo-size/pepperonas/linkedin-spider?style=flat-square&color=orange" alt="Repo Size">
   <img src="https://img.shields.io/github/stars/pepperonas/linkedin-spider?style=flat-square" alt="Stars">
@@ -27,10 +29,20 @@
 </p>
 
 <p align="center">
+  <img src="https://img.shields.io/badge/self--healing-enabled-success?style=flat-square&logo=shield&logoColor=white" alt="Self-Healing">
   <img src="https://img.shields.io/badge/API-LinkedIn_Voyager-0A66C2?style=flat-square&logo=linkedin&logoColor=white" alt="LinkedIn Voyager API">
+  <img src="https://img.shields.io/badge/auto--recovery-DOM_%2B_API-brightgreen?style=flat-square" alt="Auto Recovery">
   <img src="https://img.shields.io/badge/rate_limit-1.5s_interval-informational?style=flat-square" alt="Rate Limit">
+  <img src="https://img.shields.io/badge/i18n-7_languages-ff69b4?style=flat-square" alt="i18n">
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/tests-56_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
+  <img src="https://img.shields.io/badge/tested_with-Vitest-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest">
+  <img src="https://img.shields.io/badge/DOM-jsdom-15a2bb?style=flat-square" alt="jsdom">
   <img src="https://img.shields.io/badge/build-no_build_step-brightgreen?style=flat-square" alt="No Build Step">
-  <img src="https://img.shields.io/badge/dependencies-zero-success?style=flat-square" alt="Zero Dependencies">
+  <img src="https://img.shields.io/badge/dependencies-zero_runtime-success?style=flat-square" alt="Zero Dependencies">
+  <img src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square" alt="PRs Welcome">
 </p>
 
 <p align="center">
@@ -38,27 +50,41 @@
 </p>
 
 <p align="center">
-  Chrome Extension (Manifest V3) that automatically sends connection requests on LinkedIn search result pages.
+  Chrome Extension (Manifest V3) that automatically sends connection requests on LinkedIn search result pages — <b>with self-healing detection against LinkedIn's DOM and API changes</b>.
 </p>
 
 ## How It Works
 
-The extension scans LinkedIn search results for "Connect" buttons and sends connection requests directly via the LinkedIn Voyager API. If the API call fails (but is not rate-limited), a click fallback is used automatically.
+The extension scans LinkedIn search results for "Connect" buttons and sends connection requests directly via the LinkedIn Voyager API. If the API call fails (but is not rate-limited), a click fallback is used automatically — which also triggers LinkedIn's real request, from which the extension re-calibrates itself.
 
 **Technical Details:**
-- 3-tier button detection: `data-view-name` attribute, text search ("Vernetzen"/"Connect"), `aria-label` matching
-- Profile ID extraction from `componentkey` attribute in the DOM tree
+- Multi-tier, language-agnostic button detection: `aria-label` patterns, visible text (6 languages) **and** `href` heuristic (`search-custom-invite`), plus a legacy `data-view-name` strategy
+- Robust profile ID extraction: `componentkey="SearchResults…"` **or** any attribute carrying a `urn:li:fsd_profile:` ID
 - API call to `/voyager/api/voyagerRelationshipsDashMemberRelationships`
-- Click fallback with `realClick()` (mousedown/mouseup/click events) when API fails
+- Click fallback with `realClick()` (mousedown/mouseup/click events) when the API fails
 - Rate limiting: 1 request every 1.5 seconds
 - Automatic 60s pause on LinkedIn 429 rate limit
-- CSRF token extracted from `JSESSIONID` cookie
+- CSRF token extracted from `JSESSIONID` cookie (injected fresh on every request)
 - Profile-ID-based tracking prevents duplicate processing after DOM replacement
+
+## 🧬 Self-Healing (NEW in 2.7.0)
+
+LinkedIn constantly changes its frontend (CSS classes, DOM structure) and its internal APIs — the most common reason tools like this break overnight. LinkedIn Spider defends against this on **two layers**:
+
+1. **Resilient DOM detection** — survives renamed hashed classes, restructured DOM and language switches, because it detects via `aria-label`, text *and* `href` instead of brittle CSS selectors.
+2. **API auto-capture** — an interceptor in the page's MAIN world (`interceptor.js`) listens to LinkedIn's own invite request and learns its current shape (a "recipe": URL, headers, body). Subsequent requests are sent via that learned recipe.
+
+**The self-healing loop:** if the API path breaks → the click fallback fires → LinkedIn issues its own request → the interceptor captures it → from then on the fast API path works again automatically. A stale recipe is discarded on error and re-learned. The learned recipe is persisted in `chrome.storage`; the popup shows the API mode (`default` vs `self-healed ✓`).
+
+> **Limitation:** the extension cannot guess a completely unknown API contract — it needs **one** working real click to re-learn. As long as LinkedIn's click path works (which practically never fully disappears), the API path heals itself from it.
 
 ## Features
 
+- 🧬 **Self-healing** against DOM and API changes (see above)
+- 🌐 **Multilingual** — detection in DE / EN / FR / IT / ES / NL / PT
 - ON/OFF toggle via popup
 - Request counter (persistent in `chrome.storage`)
+- API mode indicator in the popup (`default` / `self-healed ✓`)
 - Reset counter
 - Visual status badge (bottom right on page)
 - Successful connections are marked with a 🍻 emoji
@@ -90,6 +116,8 @@ git clone https://github.com/pepperonas/linkedin-spider.git
 3. Click "Load unpacked"
 4. Select the cloned folder
 
+> **Note:** After each code update, click the refresh icon on the extension card **and** reload the LinkedIn tab (F5) — otherwise the old content script keeps running with an invalidated context.
+
 ## Usage
 
 1. Open LinkedIn people search (e.g. `https://www.linkedin.com/search/results/people/`)
@@ -101,19 +129,24 @@ git clone https://github.com/pepperonas/linkedin-spider.git
 - "🕸️ ready" (grey) — Extension loaded, inactive
 - "🕸️ Active (X sent)" (green) — Running, X requests sent
 - "🕸️ ⏳ Name..." (LinkedIn blue) — Request being sent
+- "🕸️ 🧬 Recipe learned" (purple) — API request successfully learned (self-healing)
 - "🕸️ ✅ #X Name" (dark green) — Successful request
 - "🕸️ ❌ Rate-Limit! 60s pause..." (red) — LinkedIn 429, waiting automatically
 - "🕸️ ❌ No CSRF Token!" (red) — API error
 
-## Files
+## Architecture
 
-- `manifest.json` — Chrome Extension Manifest V3
-- `lib.js` — Extracted, testable core functions (DOM selectors, click events)
-- `content.js` — Main logic: DOM scanning, API calls, click fallback, badge
-- `popup.html` — Popup UI with toggle and counter
-- `popup.js` — Popup logic and messaging
-- `styles.css` — Popup styling
-- `icon.png` — Extension icon
+Two content-script worlds plus the popup:
+
+| File | World | Role |
+|------|-------|------|
+| `interceptor.js` | **MAIN** (`document_start`) | Patches `fetch`/`XMLHttpRequest`, captures LinkedIn's invite request, posts the "recipe" via `postMessage` |
+| `lib.js` | ISOLATED | Pure, testable core functions: selectors, recipe building, invite detection |
+| `content.js` | ISOLATED | Orchestration: DOM scan, recipe-driven API calls, click fallback, recipe learning, badge |
+| `popup.html` / `popup.js` | — | Popup UI: toggle, counter, API mode |
+| `styles.css` | — | Popup styling |
+| `manifest.json` | — | Chrome Extension Manifest V3 |
+| `icon.png` | — | Extension icon |
 
 ## Tests
 
@@ -122,28 +155,47 @@ npm install
 npm test
 ```
 
-40 unit and integration tests with Vitest + jsdom:
-- `test/lib.test.js` — Tests for all extracted core functions
-- `test/content.test.js` — Integration tests for message handling and DOM interaction
-- `test/popup.test.js` — Popup UI and Chrome API tests
+**56 unit and integration tests** with Vitest + jsdom:
+- `test/lib.test.js` — core functions, self-healing helpers (recipe building, invite detection), multilingual detection
+- `test/content.test.js` — integration tests for message handling and DOM interaction
+- `test/popup.test.js` — popup UI and Chrome API tests
+
+Single file / single test:
+```bash
+npx vitest run test/lib.test.js
+npx vitest run -t "buildInviteRequest"
+```
 
 ## CI/CD
 
 - **Tests** — Run automatically on push to `main` and on pull requests
 - **Release** — On push of a `v*` tag, tests are run and a GitHub Release with ZIP is created
 
+## Changelog
+
+### 2.7.0 — Self-Healing
+- 🧬 **NEW:** API auto-capture via a MAIN-world interceptor — learns LinkedIn's current invite endpoint by itself
+- 🛠️ **FIX:** Connect buttons were no longer found after LinkedIn's SDUI migration (nested `<span>` hashes, `data-view-name` gone) → detection now via `aria-label` / text / `href`
+- 🌐 **NEW:** Multilingual detection (DE/EN/FR/IT/ES/NL/PT) for connect buttons and the confirm dialog
+- 🛠️ **FIX:** More robust profile ID extraction — matches any `urn:li:fsd_profile:` ID, not just two fixed attributes
+- ✨ Popup shows the API mode (`default` / `self-healed ✓`)
+- ✅ Test coverage raised from 40 to 56
+
+### 2.6.0
+- English language support, badge messages in English
+
 ## Notes
 
 - Only works on `*.linkedin.com` pages
-- Content script runs at `document_idle`
+- `interceptor.js` runs in the MAIN world at `document_start`, `lib.js`/`content.js` in the ISOLATED world at `document_idle`
 - ON/OFF state persists across LinkedIn page reloads
-- Counter is saved in `chrome.storage.local`
+- Counter and the learned API recipe are saved in `chrome.storage.local`
 - Already processed profiles are tracked via an in-memory Set (survives DOM replacement by LinkedIn)
 - Modals are automatically skipped (no sending for buttons inside dialogs)
 
 ## Security
 
-The CSRF token is automatically extracted from the session cookie. API calls use `credentials: 'include'` and send the `csrf-token` header according to the LinkedIn Voyager protocol.
+The CSRF token is automatically extracted from the session cookie and injected fresh on every request (a captured token may have expired). API calls use `credentials: 'include'` and send the `csrf-token` header according to the LinkedIn Voyager protocol. Learned recipes stay local in `chrome.storage` and are never transmitted anywhere.
 
 ## Developer
 

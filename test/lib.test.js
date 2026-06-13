@@ -2,7 +2,10 @@ import { describe, it, expect, beforeEach } from 'vitest';
 
 // Load lib.js — attaches to globalThis.LC
 await import('../lib.js');
-const { isConnectButton, getProfileId, findNextConnect, findConfirmButton, getCsrfToken, realClick } = globalThis.LC;
+const {
+  isConnectButton, getProfileId, findNextConnect, findConfirmButton, getCsrfToken, realClick,
+  isInviteRequest, buildInviteRequest, isUsableRecipe, DEFAULT_INVITE_RECIPE
+} = globalThis.LC;
 
 function clearBody() {
   while (document.body.firstChild) {
@@ -45,6 +48,25 @@ describe('isConnectButton', () => {
     const btn = document.createElement('button');
     btn.textContent = 'Folgen';
     expect(isConnectButton(btn)).toBe(false);
+  });
+
+  it('matches SDUI <a> via German aria-label even when text is nested', () => {
+    const a = document.createElement('a');
+    a.setAttribute('aria-label', 'Mohammad Mustejab Baig als Kontakt einladen');
+    a.innerHTML = '<span><span><span>Vernetzen</span></span></span>';
+    expect(isConnectButton(a)).toBe(true);
+  });
+
+  it('matches SDUI <a> via English aria-label', () => {
+    const a = document.createElement('a');
+    a.setAttribute('aria-label', 'Invite Jane Doe to connect');
+    expect(isConnectButton(a)).toBe(true);
+  });
+
+  it('does not match a "Nachricht senden" aria-label', () => {
+    const a = document.createElement('a');
+    a.setAttribute('aria-label', 'Mohammad Mustejab Baig eine Nachricht senden');
+    expect(isConnectButton(a)).toBe(false);
   });
 });
 
@@ -199,6 +221,44 @@ describe('findNextConnect', () => {
 
     expect(findNextConnect(new Set())).toBe(null);
   });
+
+  it('finds the SDUI connect <a> and extracts its SearchResults profile id', () => {
+    // Mirrors the real 2026 SDUI DOM: outer SearchResults componentkey container,
+    // an intermediate UUID-componentkey <a> carrying the connect aria-label, and
+    // the visible "Vernetzen" text buried in nested hashed-class spans.
+    const outer = document.createElement('div');
+    outer.setAttribute('componentkey', 'SearchResultsACoAADw8PROFILE');
+
+    const mid = document.createElement('div');
+    mid.setAttribute('componentkey', '35a54ce0-uuid');
+
+    const a = document.createElement('a');
+    a.id = 'sdui-connect';
+    a.setAttribute('aria-label', 'Mohammad Mustejab Baig als Kontakt einladen');
+    a.setAttribute('componentkey', 'a2a64791-uuid');
+    a.setAttribute('href', '/preload/search-custom-invite/?vanityName=mmb');
+    a.innerHTML = '<span><div><span><span>Vernetzen</span></span></div></span>';
+
+    mid.appendChild(a);
+    outer.appendChild(mid);
+    document.body.appendChild(outer);
+
+    const result = findNextConnect(new Set());
+    expect(result).toBe(a);
+    expect(getProfileId(result)).toBe('ACoAADw8PROFILE');
+  });
+
+  it('skips the SDUI connect <a> when its profile is already processed', () => {
+    const outer = document.createElement('div');
+    outer.setAttribute('componentkey', 'SearchResultsACoAADw8PROFILE');
+    const a = document.createElement('a');
+    a.setAttribute('aria-label', 'Jane Doe als Kontakt einladen');
+    a.innerHTML = '<span>Vernetzen</span>';
+    outer.appendChild(a);
+    document.body.appendChild(outer);
+
+    expect(findNextConnect(new Set(['ACoAADw8PROFILE']))).toBe(null);
+  });
 });
 
 describe('findConfirmButton', () => {
@@ -320,5 +380,86 @@ describe('realClick', () => {
     realClick(btn);
 
     expect(events).toContain('bubbled');
+  });
+});
+
+describe('isConnectButton via href heuristic', () => {
+  it('matches an <a> linking to the custom-invite flow regardless of language', () => {
+    const a = document.createElement('a');
+    a.setAttribute('href', '/preload/search-custom-invite/?vanityName=jane');
+    a.textContent = 'これは未知の言語です'; // unknown-language text
+    expect(isConnectButton(a)).toBe(true);
+  });
+
+  it('does not match an ordinary profile link', () => {
+    const a = document.createElement('a');
+    a.setAttribute('href', 'https://www.linkedin.com/in/jane-doe/');
+    a.textContent = 'Jane Doe';
+    expect(isConnectButton(a)).toBe(false);
+  });
+});
+
+describe('isInviteRequest', () => {
+  it('matches the voyager relationships invite endpoint', () => {
+    expect(isInviteRequest(
+      '/voyager/api/voyagerRelationshipsDashMemberRelationships?action=verifyQuotaAndCreateV2',
+      null
+    )).toBe(true);
+  });
+
+  it('matches by body shape even when the URL is unfamiliar', () => {
+    const body = JSON.stringify({ invitee: { inviteeUnion: { memberProfile: 'urn:li:fsd_profile:ABC' } } });
+    expect(isInviteRequest('/some/future/graphql/endpoint', body)).toBe(true);
+  });
+
+  it('ignores unrelated requests', () => {
+    expect(isInviteRequest('/voyager/api/feed/updates', '{"foo":1}')).toBe(false);
+    expect(isInviteRequest(undefined, undefined)).toBe(false);
+  });
+});
+
+describe('buildInviteRequest', () => {
+  it('fills the default recipe template with the profile id and a fresh csrf token', () => {
+    const req = buildInviteRequest(DEFAULT_INVITE_RECIPE, 'PROFILE123', 'ajax:tok');
+    expect(req.method).toBe('POST');
+    expect(req.headers['csrf-token']).toBe('ajax:tok');
+    expect(req.body).toContain('urn:li:fsd_profile:PROFILE123');
+    expect(req.body).not.toContain('%PROFILE_ID%');
+  });
+
+  it('substitutes the profile urn in a captured (learned) body', () => {
+    const learned = {
+      url: '/some/captured/endpoint',
+      method: 'POST',
+      headers: { 'x-li-foo': 'bar', 'csrf-token': 'stale' },
+      body: JSON.stringify({ invitee: { inviteeUnion: { memberProfile: 'urn:li:fsd_profile:OLDONE' } } })
+    };
+    const req = buildInviteRequest(learned, 'NEWONE', 'ajax:fresh');
+    expect(req.url).toBe('/some/captured/endpoint');
+    expect(req.headers['x-li-foo']).toBe('bar');
+    expect(req.headers['csrf-token']).toBe('ajax:fresh'); // stale token overridden
+    expect(req.body).toContain('urn:li:fsd_profile:NEWONE');
+    expect(req.body).not.toContain('OLDONE');
+  });
+
+  it('returns null when recipe or profile id is missing', () => {
+    expect(buildInviteRequest(null, 'X', 'tok')).toBe(null);
+    expect(buildInviteRequest(DEFAULT_INVITE_RECIPE, '', 'tok')).toBe(null);
+  });
+});
+
+describe('isUsableRecipe', () => {
+  it('accepts the default template recipe', () => {
+    expect(isUsableRecipe(DEFAULT_INVITE_RECIPE)).toBe(true);
+  });
+
+  it('accepts a captured body carrying a profile urn', () => {
+    expect(isUsableRecipe({ url: '/x', body: 'urn:li:fsd_profile:ABC' })).toBe(true);
+  });
+
+  it('rejects recipes without a substitutable urn or url', () => {
+    expect(isUsableRecipe({ url: '/x', body: '{"no":"urn"}' })).toBe(false);
+    expect(isUsableRecipe({ body: 'urn:li:fsd_profile:ABC' })).toBe(false);
+    expect(isUsableRecipe(null)).toBe(false);
   });
 });

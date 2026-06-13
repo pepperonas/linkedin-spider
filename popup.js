@@ -1,6 +1,7 @@
 const toggle = document.getElementById('toggle');
 const status = document.getElementById('status');
 const counter = document.getElementById('counter');
+const healed = document.getElementById('healed');
 const resetBtn = document.getElementById('reset');
 
 let enabled = false;
@@ -48,6 +49,7 @@ async function refreshStatus() {
   if (resp) {
     enabled = resp.active;
     counter.textContent = resp.count;
+    if (healed) healed.textContent = resp.healed ? 'self-healed ✓' : 'default';
     updateUI();
   }
 }
