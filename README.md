@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.7.0-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.7.1-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/manifest-v3-green?style=flat-square&logo=googlechrome&logoColor=white" alt="Manifest V3">
   <img src="https://img.shields.io/badge/world-MAIN_%2B_ISOLATED-8957e5?style=flat-square" alt="MAIN + ISOLATED world">
   <img src="https://img.shields.io/badge/platform-Chrome-yellow?style=flat-square&logo=googlechrome&logoColor=white" alt="Chrome">
@@ -87,7 +87,7 @@ LinkedIn ändert sein Frontend (CSS-Klassen, DOM-Struktur) und seine internen AP
 - API-Modus-Anzeige im Popup (`default` / `self-healed ✓`)
 - Counter zurücksetzen
 - Visuelles Status-Badge (unten rechts auf der Seite)
-- Erfolgreiche Vernetzungen werden mit 🍻-Emoji markiert
+- Erfolgreiche Vernetzungen werden mit 🍻-Emoji markiert — mit Material-3-Expressive-Physik-Animation (Fall mit Gravitation, Aufprall-Squash & abklingende Bounces) und Custom-Tooltip beim Hover
 - Echtzeit-Statusanzeige im Badge
 - Automatische Rate-Limit-Erkennung mit 60s Pause
 - Click-Fallback erkennt "Ausstehend"-Statuswechsel als Erfolg
@@ -172,6 +172,11 @@ npx vitest run -t "buildInviteRequest"
 - **Release** — Bei Push eines `v*`-Tags werden Tests ausgeführt und ein GitHub Release mit ZIP erstellt
 
 ## Changelog
+
+### 2.7.1 — 🍻 Material 3 Expressive
+- ✨ **NEU:** Animiertes 🍻-Erfolgs-Emoji im Material-3-Expressive-Stil — spatialer Spring mit Gravitations-Fall, Aufprall-Squash-&-Stretch, abklingenden Bounces (Overshoot/Settle) und Amber-Shockwave-Ring
+- ✨ **NEU:** Custom-Tooltip beim Hover („🍻 Networking, bottled and served by LinkedIn Spider") mit Spring-Entrance, viewport-Klemmung und Auto-Flip; `position: fixed`, um LinkedIns Overflow-Clipping zu entgehen
+- ♿ Voller `prefers-reduced-motion`-Guard + `role="img"`/`aria-label`
 
 ### 2.7.0 — Self-Healing
 - 🧬 **NEU:** API-Auto-Capture via MAIN-World-Interceptor — lernt LinkedIns aktuellen Invite-Endpoint selbst

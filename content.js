@@ -41,6 +41,135 @@
     badge.style.background = color || '#333';
   }
 
+  // --- 🍻 Beer-emoji success marker: Material 3 Expressive motion ---------------
+  // A "spatial spring" drop with gravity acceleration, an impact squash & stretch,
+  // and decaying bounces that overshoot and settle into place (M3 Expressive).
+  function injectStyles() {
+    if (document.getElementById('lc-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'lc-styles';
+    style.textContent = `
+@keyframes lc-beer-drop {
+  /* fall — accelerating under gravity (ease-in) */
+  0%   { transform: translateY(-56px) scale(.5) rotate(-22deg); opacity: 0;
+         animation-timing-function: cubic-bezier(.55,0,.95,.4); }
+  /* impact — hard squash onto the baseline */
+  38%  { transform: translateY(0) scaleX(1.3) scaleY(.7) rotate(4deg); opacity: 1;
+         animation-timing-function: cubic-bezier(.2,.7,.3,1); }
+  /* rebound up — stretch (spring overshoot) */
+  55%  { transform: translateY(-18px) scaleX(.85) scaleY(1.18) rotate(-6deg);
+         animation-timing-function: cubic-bezier(.5,0,.9,.45); }
+  /* second landing — softer squash (damping) */
+  70%  { transform: translateY(0) scaleX(1.15) scaleY(.9) rotate(3deg);
+         animation-timing-function: cubic-bezier(.2,.7,.3,1); }
+  /* small hop */
+  82%  { transform: translateY(-6px) scaleX(.96) scaleY(1.05) rotate(-1deg);
+         animation-timing-function: cubic-bezier(.5,0,.9,.45); }
+  91%  { transform: translateY(0) scaleX(1.05) scaleY(.97);
+         animation-timing-function: cubic-bezier(.3,.6,.4,1); }
+  100% { transform: translateY(0) scale(1) rotate(0); opacity: 1; }
+}
+/* impact shockwave ring — amber, expands once on landing */
+@keyframes lc-beer-shock {
+  0%   { transform: translate(-50%,-50%) scale(.25); opacity: .55; }
+  100% { transform: translate(-50%,-50%) scale(2.8); opacity: 0; }
+}
+/* hover — gentle "clink" wobble pivoting from the base */
+@keyframes lc-beer-clink {
+  0%,100% { transform: rotate(0) scale(1); }
+  25%     { transform: rotate(-9deg) scale(1.1); }
+  50%     { transform: rotate(0) scale(1.05); }
+  75%     { transform: rotate(9deg) scale(1.1); }
+}
+.lc-beer {
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 20px; line-height: 1; cursor: default; position: relative;
+  transform-origin: 50% 100%; will-change: transform;
+  animation: lc-beer-drop .9s both;
+}
+.lc-beer::after {
+  content: ''; position: absolute; left: 50%; top: 62%;
+  width: 24px; height: 24px; border-radius: 50%;
+  border: 2px solid rgba(255,193,7,.85);
+  transform: translate(-50%,-50%) scale(.25);
+  animation: lc-beer-shock .6s .3s ease-out both;
+  pointer-events: none;
+}
+.lc-beer:hover { animation: lc-beer-clink 1.5s ease-in-out infinite; }
+/* Custom M3 Expressive tooltip (fixed-positioned to escape overflow clipping) */
+.lc-tip {
+  position: fixed; z-index: 100000; max-width: 260px; box-sizing: border-box;
+  background: linear-gradient(135deg,#3a2e16,#241c0d);
+  color: #ffe7b3; font: 600 12.5px/1.4 -apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+  letter-spacing: .1px; padding: 10px 14px; border-radius: 14px;
+  border: 1px solid rgba(255,193,7,.28);
+  box-shadow: 0 10px 30px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.06);
+  pointer-events: none; opacity: 0;
+  transform: translateY(6px) scale(.86); transform-origin: 50% 120%;
+  transition: opacity .18s ease, transform .36s cubic-bezier(.2,1.35,.4,1);
+}
+.lc-tip.lc-tip-show { opacity: 1; transform: translateY(0) scale(1); }
+.lc-tip::after {
+  content: ''; position: absolute; left: var(--lc-caret,50%); bottom: -6px;
+  width: 12px; height: 12px; background: #241c0d;
+  border-right: 1px solid rgba(255,193,7,.28);
+  border-bottom: 1px solid rgba(255,193,7,.28);
+  transform: translateX(-50%) rotate(45deg);
+}
+.lc-tip.lc-tip-below { transform-origin: 50% -20%; }
+.lc-tip.lc-tip-below::after {
+  bottom: auto; top: -6px; background: #3a2e16;
+  border: 0; border-left: 1px solid rgba(255,193,7,.28);
+  border-top: 1px solid rgba(255,193,7,.28);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lc-beer, .lc-beer:hover { animation: none !important; }
+  .lc-beer::after { display: none; }
+  .lc-tip { transition: opacity .12s ease; transform: none; }
+  .lc-tip.lc-tip-show { transform: none; }
+}
+`;
+    (document.head || document.documentElement).appendChild(style);
+  }
+
+  let tipEl = null;
+  function showTip(target) {
+    if (!tipEl) {
+      tipEl = document.createElement('div');
+      tipEl.className = 'lc-tip';
+      tipEl.textContent = '🍻 Networking, bottled and served by LinkedIn Spider';
+      document.body.appendChild(tipEl);
+    }
+    const r = target.getBoundingClientRect();
+    tipEl.classList.add('lc-tip-show');
+    const tr = tipEl.getBoundingClientRect();
+    let left = r.left + r.width / 2 - tr.width / 2;
+    left = Math.max(8, Math.min(left, window.innerWidth - tr.width - 8));
+    let top = r.top - tr.height - 10;
+    const below = top < 8;
+    if (below) top = r.bottom + 10;
+    tipEl.classList.toggle('lc-tip-below', below);
+    tipEl.style.left = left + 'px';
+    tipEl.style.top = top + 'px';
+    tipEl.style.setProperty('--lc-caret', (r.left + r.width / 2 - left) + 'px');
+  }
+  function hideTip() {
+    if (tipEl) tipEl.classList.remove('lc-tip-show');
+  }
+
+  function makeBeerEmoji() {
+    injectStyles();
+    const span = document.createElement('span');
+    span.className = 'lc-beer';
+    span.textContent = '🍻';
+    span.setAttribute('data-lc-processed', 'true');
+    span.setAttribute('role', 'img');
+    span.setAttribute('aria-label', 'Connection request sent');
+    span.addEventListener('mouseenter', () => showTip(span));
+    span.addEventListener('mouseleave', hideTip);
+    return span;
+  }
+
   // --- Self-healing: learn the live invite request from the MAIN-world interceptor
   window.addEventListener('message', (event) => {
     if (event.source !== window) return;
@@ -221,12 +350,8 @@
       console.log(LOG, 'Request #' + count + ' sent to', name);
       updateBadge('✅ #' + count + ' ' + name.substring(0, 20), '#2e7d32');
 
-      // Replace button with 🍻 emoji
-      const emojiSpan = document.createElement('span');
-      emojiSpan.textContent = '🍻';
-      emojiSpan.style.cssText = 'font-size:20px;cursor:default;';
-      emojiSpan.setAttribute('data-lc-processed', 'true');
-      connectLink.replaceWith(emojiSpan);
+      // Replace button with an animated 🍻 emoji (M3 Expressive drop + bounce)
+      connectLink.replaceWith(makeBeerEmoji());
     }
   }
 

@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.7.0-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.7.1-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/manifest-v3-green?style=flat-square&logo=googlechrome&logoColor=white" alt="Manifest V3">
   <img src="https://img.shields.io/badge/world-MAIN_%2B_ISOLATED-8957e5?style=flat-square" alt="MAIN + ISOLATED world">
   <img src="https://img.shields.io/badge/platform-Chrome-yellow?style=flat-square&logo=googlechrome&logoColor=white" alt="Chrome">
@@ -87,7 +87,7 @@ LinkedIn constantly changes its frontend (CSS classes, DOM structure) and its in
 - API mode indicator in the popup (`default` / `self-healed ✓`)
 - Reset counter
 - Visual status badge (bottom right on page)
-- Successful connections are marked with a 🍻 emoji
+- Successful connections are marked with a 🍻 emoji — with a Material 3 Expressive physics animation (gravity drop, impact squash & decaying bounces) and a custom tooltip on hover
 - Real-time status display in badge
 - Automatic rate limit detection with 60s pause
 - Click fallback detects "Pending" status change as success
@@ -172,6 +172,11 @@ npx vitest run -t "buildInviteRequest"
 - **Release** — On push of a `v*` tag, tests are run and a GitHub Release with ZIP is created
 
 ## Changelog
+
+### 2.7.1 — 🍻 Material 3 Expressive
+- ✨ **NEW:** Animated 🍻 success emoji in Material 3 Expressive style — spatial spring with a gravity drop, impact squash & stretch, decaying bounces (overshoot/settle) and an amber shockwave ring
+- ✨ **NEW:** Custom tooltip on hover ("🍻 Networking, bottled and served by LinkedIn Spider") with a spring entrance, viewport clamping and auto-flip; `position: fixed` to escape LinkedIn's overflow clipping
+- ♿ Full `prefers-reduced-motion` guard + `role="img"`/`aria-label`
 
 ### 2.7.0 — Self-Healing
 - 🧬 **NEW:** API auto-capture via a MAIN-world interceptor — learns LinkedIn's current invite endpoint by itself
