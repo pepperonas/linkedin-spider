@@ -69,7 +69,7 @@ Required headers: `csrf-token` (from `getCsrfToken`), `x-restli-protocol-version
 Helpers live in `lib.js`; update them there if LinkedIn changes its DOM:
 - **Profile ID** (`getProfileId`): walks up to 20 ancestors looking for `componentkey` starting with `SearchResults` (strips that prefix) or `data-chameleon-result-urn` containing `fsd_profile:`.
 - **Connect button** (`findNextConnect` / `isConnectButton`): strategy 1 = legacy `[data-view-name="edge-creation-connect-action"]` descendants; strategy 2 = any `a`/`button`/`[role="button"]` recognized by `isConnectButton`. Since LinkedIn's SDUI rollout (2026) the connect element is an `<a>` whose visible "Vernetzen"/"Connect" text is buried in nested hashed-class `<span>`s, so `isConnectButton` primarily matches the **aria-label** (`… als Kontakt einladen` DE / `Invite … to connect` EN) and falls back to exact text. Both strategies exclude elements inside `[role="dialog"]`, `.artdeco-modal`, `dialog`.
-- **Confirm dialog** (`findConfirmButton`): `button[aria-label="Ohne Notiz senden"]` / `"Send without a note"`, then text match, then `.artdeco-button--primary` inside a `.send-invite` modal.
+- **Confirm dialog** (`findConfirmButton`): anchored regexes (`SEND_WITHOUT_NOTE_RE`) matching aria-label *or* text in 7 languages, covering LinkedIn's A/B wording "Ohne **Notiz** senden" vs "Ohne **Nachricht** senden" (EN: "note" vs "message") — anchored so the sibling "Nachricht senden"/"Send with a message" button never matches. Scans `[role="dialog"]`/`.artdeco-modal`/`dialog` first, then falls back to a document-wide scan (SDUI dialogs aren't always marked as dialogs); `.artdeco-button--primary` inside `.send-invite` remains as legacy fallback.
 
 ## Message protocol (popup ↔ content script)
 
@@ -83,4 +83,4 @@ If `sendMessage` hits `chrome.runtime.lastError`, the content script isn't loade
 
 ## Versioning
 
-User-facing version lives in `manifest.json` (currently 2.7.0); `package.json` version is independent and lags. Bump `manifest.json` for releases.
+User-facing version lives in `manifest.json` (currently 2.7.2); `package.json` version is independent and lags. Bump `manifest.json` for releases.

@@ -325,6 +325,57 @@ describe('findConfirmButton', () => {
 
     expect(findConfirmButton()).toBe(null);
   });
+
+  it('finds new wording "Ohne Nachricht senden" (Notiz → Nachricht A/B test)', () => {
+    const dialog = document.createElement('div');
+    dialog.setAttribute('role', 'dialog');
+    const withMsg = document.createElement('button');
+    withMsg.textContent = 'Nachricht senden';
+    const without = document.createElement('button');
+    without.textContent = 'Ohne Nachricht senden';
+    dialog.appendChild(withMsg);
+    dialog.appendChild(without);
+    document.body.appendChild(dialog);
+
+    expect(findConfirmButton()).toBe(without);
+  });
+
+  it('finds new wording "Send without a message"', () => {
+    const dialog = document.createElement('div');
+    dialog.setAttribute('role', 'dialog');
+    const btn = document.createElement('button');
+    btn.setAttribute('aria-label', 'Send without a message');
+    btn.textContent = 'Send without a message';
+    dialog.appendChild(btn);
+    document.body.appendChild(dialog);
+
+    expect(findConfirmButton()).toBe(btn);
+  });
+
+  it('never matches the sibling "Nachricht senden" / "Send with a message" button', () => {
+    const dialog = document.createElement('div');
+    dialog.setAttribute('role', 'dialog');
+    const withMsg = document.createElement('button');
+    withMsg.textContent = 'Nachricht senden';
+    const withMsgEn = document.createElement('button');
+    withMsgEn.textContent = 'Send with a message';
+    dialog.appendChild(withMsg);
+    dialog.appendChild(withMsgEn);
+    document.body.appendChild(dialog);
+
+    expect(findConfirmButton()).toBe(null);
+  });
+
+  it('finds the button in an SDUI dialog without role="dialog" (document-wide fallback)', () => {
+    const sduiOverlay = document.createElement('div');
+    sduiOverlay.className = 'a1b2c3d4 _9f8e7d6c'; // hashed classes, no dialog marker
+    const btn = document.createElement('button');
+    btn.textContent = 'Ohne Nachricht senden';
+    sduiOverlay.appendChild(btn);
+    document.body.appendChild(sduiOverlay);
+
+    expect(findConfirmButton()).toBe(btn);
+  });
 });
 
 describe('getCsrfToken', () => {

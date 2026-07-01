@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.7.1-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.7.2-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/manifest-v3-green?style=flat-square&logo=googlechrome&logoColor=white" alt="Manifest V3">
   <img src="https://img.shields.io/badge/world-MAIN_%2B_ISOLATED-8957e5?style=flat-square" alt="MAIN + ISOLATED world">
   <img src="https://img.shields.io/badge/platform-Chrome-yellow?style=flat-square&logo=googlechrome&logoColor=white" alt="Chrome">
@@ -37,7 +37,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/tests-56_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-60_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
   <img src="https://img.shields.io/badge/tested_with-Vitest-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest">
   <img src="https://img.shields.io/badge/DOM-jsdom-15a2bb?style=flat-square" alt="jsdom">
   <img src="https://img.shields.io/badge/build-no_build_step-brightgreen?style=flat-square" alt="No Build Step">
@@ -155,7 +155,7 @@ npm install
 npm test
 ```
 
-**56 unit and integration tests** with Vitest + jsdom:
+**60 unit and integration tests** with Vitest + jsdom:
 - `test/lib.test.js` — core functions, self-healing helpers (recipe building, invite detection), multilingual detection
 - `test/content.test.js` — integration tests for message handling and DOM interaction
 - `test/popup.test.js` — popup UI and Chrome API tests
@@ -172,6 +172,11 @@ npx vitest run -t "buildInviteRequest"
 - **Release** — On push of a `v*` tag, tests are run and a GitHub Release with ZIP is created
 
 ## Changelog
+
+### 2.7.2 — Confirm-dialog fix
+- 🛠️ **FIX:** LinkedIn changed the dialog wording ("Send without a **message**" instead of "Send without a **note**") — detection now matches both variants via anchored regexes in all 7 languages, so the sibling button ("Send with a message") can never match
+- 🛠️ **FIX:** SDUI dialogs without `role="dialog"`/`.artdeco-modal` are found via a document-wide fallback scan
+- ✅ Test coverage raised from 56 to 60
 
 ### 2.7.1 — 🍻 Material 3 Expressive
 - ✨ **NEW:** Animated 🍻 success emoji in Material 3 Expressive style — spatial spring with a gravity drop, impact squash & stretch, decaying bounces (overshoot/settle) and an amber shockwave ring

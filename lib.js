@@ -27,6 +27,7 @@
   ];
 
   // Confirm-dialog button ("send without a note") per locale.
+  // Kept for backwards compat / tests; matching uses SEND_WITHOUT_NOTE_RE.
   const SEND_WITHOUT_NOTE = [
     'Ohne Notiz senden',     // DE
     'Send without a note',   // EN
@@ -35,6 +36,25 @@
     'Envoyer sans note',     // FR
     'Enviar sem nota'        // PT
   ];
+
+  // LinkedIn A/B-tests the wording: "Notiz" vs "Nachricht" (DE), "note" vs
+  // "message" (EN), etc. Match both variants, anchored so the sibling button
+  // ("Nachricht senden" / "Send with a message") can never match.
+  const SEND_WITHOUT_NOTE_RE = [
+    /^ohne\s+(notiz|nachricht)\s+senden$/i,          // DE
+    /^send\s+without\s+(a\s+)?(note|message)$/i,     // EN
+    /^enviar\s+sin\s+(nota|mensaje)$/i,              // ES
+    /^invia(?:re)?\s+senza\s+(nota|messaggio)$/i,    // IT
+    /^envoyer\s+sans\s+(note|message)$/i,            // FR
+    /^enviar\s+sem\s+(nota|mensagem)$/i,             // PT
+    /^verzend(?:en)?\s+zonder\s+(notitie|bericht)$/i // NL
+  ];
+
+  function matchesSendWithoutNote(el) {
+    const aria = (el.getAttribute('aria-label') || '').trim();
+    const text = el.textContent.trim();
+    return SEND_WITHOUT_NOTE_RE.some((re) => re.test(aria) || re.test(text));
+  }
 
   // Built-in invite request recipe (early-2026 Voyager endpoint). Used until a
   // live request is captured by the MAIN-world interceptor (see interceptor.js).
@@ -116,28 +136,29 @@
   }
 
   function findConfirmButton() {
+    // 1. Inside known dialog containers: aria-label or text, any wording variant
     const modals = document.querySelectorAll('[role="dialog"], .artdeco-modal, dialog');
     for (const modal of modals) {
-      // 1. Exact aria-label match in any known locale
-      for (const label of SEND_WITHOUT_NOTE) {
-        const byAria = modal.querySelector(
-          `button[aria-label="${label}"], a[aria-label="${label}"], [role="button"][aria-label="${label}"]`
-        );
-        if (byAria) return byAria;
-      }
-
-      // 2. Exact text match in any known locale
       const clickables = modal.querySelectorAll('button, a, [role="button"]');
       for (const btn of clickables) {
-        if (SEND_WITHOUT_NOTE.includes(btn.textContent.trim())) return btn;
+        if (matchesSendWithoutNote(btn)) return btn;
       }
 
-      // 3. send-invite modal → primary action button
+      // send-invite modal → primary action button
       if (modal.classList.contains('send-invite') || modal.querySelector('.send-invite')) {
         const primary = modal.querySelector('.artdeco-button--primary');
         if (primary) return primary;
       }
     }
+
+    // 2. SDUI fallback: newer dialogs aren't always marked role="dialog" /
+    // .artdeco-modal. The "send without note/message" wording only ever
+    // appears in this dialog, so a document-wide scan is safe.
+    const all = document.querySelectorAll('button, a, [role="button"]');
+    for (const btn of all) {
+      if (matchesSendWithoutNote(btn)) return btn;
+    }
+
     return null;
   }
 
@@ -206,7 +227,8 @@
     isUsableRecipe,
     DEFAULT_INVITE_RECIPE,
     CONNECT_TEXTS,
-    SEND_WITHOUT_NOTE
+    SEND_WITHOUT_NOTE,
+    SEND_WITHOUT_NOTE_RE
   };
 
   root.LC = LC;
