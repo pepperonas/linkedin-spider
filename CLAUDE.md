@@ -34,7 +34,7 @@ Two content-script worlds + the popup. The split between `lib.js` and `content.j
 - **`content.js`** (isolated world) — Stateful orchestration IIFE. Pulls helpers off `window.LC`, runs a 1.5s `setInterval` (`tick()`). Holds runtime state: `active`, `pending` (in-flight guard), `rateLimited`, `count`, `learnedRecipe`, and `processedProfiles` (a `Set` of profile IDs). Owns the recipe-driven network call (`sendInvitation` → `trySendWithRecipe`, preferring `learnedRecipe` then `DEFAULT_INVITE_RECIPE`), the `clickFallback`, the badge, the `window.message` listener that receives captured recipes, and the popup message listener.
 - **`interceptor.js`** (**MAIN world**, `run_at: document_start`) — Patches `window.fetch` and `XMLHttpRequest` to detect LinkedIn's own "send invitation" request, capture URL/headers/body, and `window.postMessage` the recipe to `content.js`. Runs in the page world so it can see the page's own network calls; **cannot** use `window.LC` (different world), so its invite-detection heuristic is duplicated from `lib.js`'s `isInviteRequest` — keep the two in sync.
 - **`popup.html` / `popup.js`** — Popup UI. Talks to the content script via `chrome.tabs.sendMessage`, polls status every 1s while open. Shows API mode (`default` vs `self-healed ✓`). State (`lcEnabled`, `lcCount`, `lcRecipe`) persisted in `chrome.storage.local`.
-- **`styles.css`** — Popup styling only (NOT injected into LinkedIn).
+- **`styles.css`** — Popup styling only (NOT injected into LinkedIn). Styles for the in-page 🍻 marker/tooltip live in `content.js` (`injectStyles()` appends a `<style id="lc-styles">` once on first success).
 
 ### Self-healing recipe flow
 
@@ -51,7 +51,7 @@ Two content-script worlds + the popup. The split between `lib.js` and `content.j
    - `rate_limited` → set `rateLimited`, badge a 60s pause, then auto-resume.
    - `error` → `clickFallback()` (real-clicks the button, waits up to ~3s for either the confirm dialog or the button text flipping to "Ausstehend"/"Pending" = success).
 5. No profile ID → straight to `clickFallback()`.
-6. On success: increment counter, persist to storage, and replace the button with a 🍻 emoji span.
+6. On success: increment counter, persist to storage, and replace the button with an animated 🍻 emoji (`makeBeerEmoji()` in content.js): M3-Expressive gravity drop with squash-&-stretch bounces + amber shockwave ring, hover shows a custom fixed-position tooltip ("🍻 Networking, bottled and served by LinkedIn Spider", viewport-clamped, auto-flips below when there's no room above). Full `prefers-reduced-motion` guard.
 
 ### Why `realClick()`
 
