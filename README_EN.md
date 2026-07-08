@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.7.2-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.7.3-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/manifest-v3-green?style=flat-square&logo=googlechrome&logoColor=white" alt="Manifest V3">
   <img src="https://img.shields.io/badge/world-MAIN_%2B_ISOLATED-8957e5?style=flat-square" alt="MAIN + ISOLATED world">
   <img src="https://img.shields.io/badge/platform-Chrome-yellow?style=flat-square&logo=googlechrome&logoColor=white" alt="Chrome">
@@ -37,7 +37,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/tests-60_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-63_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
   <img src="https://img.shields.io/badge/tested_with-Vitest-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest">
   <img src="https://img.shields.io/badge/DOM-jsdom-15a2bb?style=flat-square" alt="jsdom">
   <img src="https://img.shields.io/badge/build-no_build_step-brightgreen?style=flat-square" alt="No Build Step">
@@ -61,7 +61,7 @@ The extension scans LinkedIn search results for "Connect" buttons and sends conn
 - Multi-tier, language-agnostic button detection: `aria-label` patterns, visible text (6 languages) **and** `href` heuristic (`search-custom-invite`), plus a legacy `data-view-name` strategy
 - Robust profile ID extraction: `componentkey="SearchResults…"` **or** any attribute carrying a `urn:li:fsd_profile:` ID
 - API call to `/voyager/api/voyagerRelationshipsDashMemberRelationships`
-- Click fallback with `realClick()` (mousedown/mouseup/click events) when the API fails
+- Click fallback with `realClick()` (full pointer+mouse event sequence) when the API fails
 - Rate limiting: 1 request every 1.5 seconds
 - Automatic 60s pause on LinkedIn 429 rate limit
 - CSRF token extracted from `JSESSIONID` cookie (injected fresh on every request)
@@ -155,7 +155,7 @@ npm install
 npm test
 ```
 
-**60 unit and integration tests** with Vitest + jsdom:
+**63 unit and integration tests** with Vitest + jsdom:
 - `test/lib.test.js` — core functions, self-healing helpers (recipe building, invite detection), multilingual detection
 - `test/content.test.js` — integration tests for message handling and DOM interaction
 - `test/popup.test.js` — popup UI and Chrome API tests
@@ -172,6 +172,13 @@ npx vitest run -t "buildInviteRequest"
 - **Release** — On push of a `v*` tag, tests are run and a GitHub Release with ZIP is created
 
 ## Changelog
+
+### 2.7.3 — Pointer events & anti-wedge
+- 🛠️ **FIX:** `realClick()` now dispatches a full pointer+mouse sequence (`pointerdown`/`pointerup` + coordinates) — LinkedIn's new SDUI (React) buttons only respond to pointer events, so plain MouseEvents were silently ignored (the click fallback did "nothing")
+- 🛠️ **FIX:** Cards without a profile ID whose click fallback keeps failing are skipped after 3 attempts (`data-lc-fails`) — previously a single broken card wedged the whole run forever
+- 🛠️ **FIX:** The confirm click is now verified (dialog actually closed?) and retried up to 3×; if the dialog still hangs, it is dismissed after 5 ticks instead of stalling the run
+- ⏱️ Post-click dialog wait window raised from 3 s to 6 s (sluggish search pages)
+- ✅ Test coverage raised from 60 to 63
 
 ### 2.7.2 — Confirm-dialog fix
 - 🛠️ **FIX:** LinkedIn changed the dialog wording ("Send without a **message**" instead of "Send without a **note**") — detection now matches both variants via anchored regexes in all 7 languages, so the sibling button ("Send with a message") can never match

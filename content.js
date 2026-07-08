@@ -2,7 +2,7 @@
   const LOG = '[LC]';
   const {
     getCsrfToken, getProfileId, findNextConnect, findConfirmButton, realClick,
-    buildInviteRequest, isUsableRecipe, DEFAULT_INVITE_RECIPE
+    buildInviteRequest, isUsableRecipe, DEFAULT_INVITE_RECIPE, MAX_CLICK_FAILS
   } = window.LC;
   let active = false;
   let intervalId = null;
@@ -10,6 +10,7 @@
   let pending = false;
   let rateLimited = false;
   let learnedRecipe = null; // self-healed invite recipe captured from a live request
+  let stuckDialogTicks = 0; // consecutive ticks a confirm dialog refused to close
   const processedProfiles = new Set();
 
   console.log(LOG, 'Content script loaded on', location.href);
@@ -243,21 +244,36 @@
     return 'error';
   }
 
+  // Clicks the confirm button and verifies the dialog actually closed
+  // (retries the click a few times — a single synthetic click can get lost).
+  async function confirmAndVerify() {
+    for (let round = 0; round < 3; round++) {
+      const confirmBtn = findConfirmButton();
+      if (!confirmBtn) return true; // dialog gone = confirmed (or never opened)
+      console.log(LOG, 'Found confirm button, clicking (round ' + (round + 1) + ')');
+      realClick(confirmBtn);
+      for (let i = 0; i < 5; i++) {
+        await new Promise(r => setTimeout(r, 300));
+        if (!findConfirmButton()) return true;
+      }
+    }
+    console.log(LOG, 'Confirm dialog would not close');
+    return false;
+  }
+
   async function clickFallback(connectLink, name) {
     console.log(LOG, 'Using click fallback for', name);
     updateBadge('⏳ ' + name.substring(0, 20) + '...', '#0a66c2');
     realClick(connectLink);
 
     // Wait for either: confirm dialog, or button text change to "Ausstehend"/"Pending"
-    for (let attempt = 0; attempt < 10; attempt++) {
+    // (20 x 300ms — heavy search pages can take several seconds to open the dialog)
+    for (let attempt = 0; attempt < 20; attempt++) {
       await new Promise(r => setTimeout(r, 300));
 
       // Check for confirm dialog
-      const confirmBtn = findConfirmButton();
-      if (confirmBtn) {
-        console.log(LOG, 'Found confirm button, clicking');
-        realClick(confirmBtn);
-        return true;
+      if (findConfirmButton()) {
+        return await confirmAndVerify();
       }
 
       // Check if button changed to "Ausstehend"/"Pending" (= success without dialog)
@@ -278,7 +294,12 @@
       }
     }
 
-    console.log(LOG, 'No confirm dialog or state change for', name);
+    // Nothing happened at all: LinkedIn ignored the click. Count the failure on
+    // the element itself — after LC.MAX_CLICK_FAILS tries findNextConnect skips
+    // it, so one broken card can't wedge the whole run.
+    const fails = (parseInt(connectLink.getAttribute('data-lc-fails'), 10) || 0) + 1;
+    connectLink.setAttribute('data-lc-fails', String(fails));
+    console.log(LOG, 'No confirm dialog or state change for', name, '(fail ' + fails + '/' + MAX_CLICK_FAILS + ')');
     updateBadge('❌ ' + name.substring(0, 20), '#c00');
     return false;
   }
@@ -294,10 +315,24 @@
     // First: check if there's an open confirm dialog to handle
     const confirmBtn = findConfirmButton();
     if (confirmBtn) {
+      stuckDialogTicks++;
+      if (stuckDialogTicks > 5) {
+        // Confirm click isn't registering — dismiss the modal so the run
+        // doesn't stall on it forever.
+        console.log(LOG, 'Confirm dialog stuck, dismissing it');
+        const dismiss = document.querySelector(
+          '[data-test-modal-close-btn], .artdeco-modal__dismiss, ' +
+          'button[aria-label="Verwerfen"], button[aria-label="Dismiss"]'
+        );
+        if (dismiss) realClick(dismiss);
+        stuckDialogTicks = 0;
+        return;
+      }
       console.log(LOG, 'Found open confirm dialog, clicking');
       realClick(confirmBtn);
       return;
     }
+    stuckDialogTicks = 0;
 
     const connectLink = findNextConnect(processedProfiles);
     if (!connectLink) {

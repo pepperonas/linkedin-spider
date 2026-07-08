@@ -162,6 +162,27 @@ describe('findNextConnect', () => {
     expect(result).toBe(btn);
   });
 
+  it('skips buttons that failed the click fallback too often (data-lc-fails)', () => {
+    const broken = document.createElement('button');
+    broken.textContent = 'Vernetzen';
+    broken.setAttribute('data-lc-fails', '3');
+    const next = document.createElement('button');
+    next.textContent = 'Vernetzen';
+    document.body.appendChild(broken);
+    document.body.appendChild(next);
+
+    expect(findNextConnect(new Set())).toBe(next);
+  });
+
+  it('still returns buttons below the fail limit', () => {
+    const btn = document.createElement('button');
+    btn.textContent = 'Vernetzen';
+    btn.setAttribute('data-lc-fails', '2');
+    document.body.appendChild(btn);
+
+    expect(findNextConnect(new Set())).toBe(btn);
+  });
+
   it('skips buttons inside dialogs', () => {
     const dialog = document.createElement('div');
     dialog.setAttribute('role', 'dialog');
@@ -408,7 +429,7 @@ describe('getCsrfToken', () => {
 });
 
 describe('realClick', () => {
-  it('dispatches mousedown, mouseup, and click events', () => {
+  it('dispatches mousedown, mouseup, and click events in order', () => {
     const btn = document.createElement('button');
     const events = [];
     ['mousedown', 'mouseup', 'click'].forEach(type => {
@@ -418,6 +439,19 @@ describe('realClick', () => {
     realClick(btn);
 
     expect(events).toEqual(['mousedown', 'mouseup', 'click']);
+  });
+
+  it('dispatches pointer events for SDUI (React) handlers when PointerEvent exists', () => {
+    if (typeof PointerEvent !== 'function') return; // jsdom without PointerEvent
+    const btn = document.createElement('button');
+    const events = [];
+    ['pointerdown', 'pointerup', 'click'].forEach(type => {
+      btn.addEventListener(type, (e) => events.push(e.type));
+    });
+
+    realClick(btn);
+
+    expect(events).toEqual(['pointerdown', 'pointerup', 'click']);
   });
 
   it('dispatches events that bubble', () => {

@@ -111,11 +111,20 @@
     return false;
   }
 
+  // A connect element the click fallback failed on this many times is skipped,
+  // so one broken card can't wedge the whole run (content.js bumps the count).
+  const MAX_CLICK_FAILS = 3;
+
+  function tooManyFails(el) {
+    return (parseInt(el.getAttribute('data-lc-fails'), 10) || 0) >= MAX_CLICK_FAILS;
+  }
+
   function findNextConnect(processedProfiles) {
     // Strategy 1: legacy data-view-name container (older LinkedIn UIs)
     const dvn = document.querySelectorAll('[data-view-name="edge-creation-connect-action"] a, [data-view-name="edge-creation-connect-action"] button');
     for (const el of dvn) {
       if (!isConnectButton(el)) continue;
+      if (tooManyFails(el)) continue;
       if (el.closest('[role="dialog"], .artdeco-modal, dialog')) continue;
       const pid = getProfileId(el);
       if (pid && processedProfiles.has(pid)) continue;
@@ -126,6 +135,7 @@
     const candidates = document.querySelectorAll('a, button, [role="button"]');
     for (const el of candidates) {
       if (!isConnectButton(el)) continue;
+      if (tooManyFails(el)) continue;
       if (el.closest('[role="dialog"], .artdeco-modal, dialog')) continue;
       const pid = getProfileId(el);
       if (pid && processedProfiles.has(pid)) continue;
@@ -163,9 +173,42 @@
   }
 
   function realClick(el) {
-    ['mousedown', 'mouseup', 'click'].forEach(type => {
-      el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true }));
-    });
+    // LinkedIn's SDUI (React) components listen to *pointer* events; the legacy
+    // Ember ones to mouse events. Dispatch a full pointer+mouse sequence with
+    // real coordinates so both frameworks accept the click.
+    let cx = 0, cy = 0;
+    if (typeof el.getBoundingClientRect === 'function') {
+      const r = el.getBoundingClientRect();
+      cx = r.left + r.width / 2;
+      cy = r.top + r.height / 2;
+    }
+    const base = {
+      bubbles: true, cancelable: true, composed: true,
+      view: (el.ownerDocument && el.ownerDocument.defaultView) || null,
+      detail: 1, button: 0, clientX: cx, clientY: cy
+    };
+    const PE = typeof PointerEvent === 'function' ? PointerEvent : null;
+    const fire = (Ctor, type, extra) => {
+      const init = Object.assign({}, base, extra);
+      let ev;
+      try {
+        ev = new Ctor(type, init);
+      } catch (e) {
+        // Some environments reject the `view` member — retry without it.
+        delete init.view;
+        ev = new Ctor(type, init);
+      }
+      el.dispatchEvent(ev);
+    };
+    const pointerInit = { pointerId: 1, pointerType: 'mouse', isPrimary: true };
+
+    try { el.focus({ preventScroll: true }); } catch (e) { /* not focusable */ }
+    if (PE) fire(PE, 'pointerover', pointerInit);
+    if (PE) fire(PE, 'pointerdown', Object.assign({ buttons: 1 }, pointerInit));
+    fire(MouseEvent, 'mousedown', { buttons: 1 });
+    if (PE) fire(PE, 'pointerup', pointerInit);
+    fire(MouseEvent, 'mouseup');
+    fire(MouseEvent, 'click');
   }
 
   // --- Self-healing invite recipe helpers ----------------------------------
@@ -228,7 +271,8 @@
     DEFAULT_INVITE_RECIPE,
     CONNECT_TEXTS,
     SEND_WITHOUT_NOTE,
-    SEND_WITHOUT_NOTE_RE
+    SEND_WITHOUT_NOTE_RE,
+    MAX_CLICK_FAILS
   };
 
   root.LC = LC;

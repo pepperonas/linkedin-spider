@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.7.2-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.7.3-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/manifest-v3-green?style=flat-square&logo=googlechrome&logoColor=white" alt="Manifest V3">
   <img src="https://img.shields.io/badge/world-MAIN_%2B_ISOLATED-8957e5?style=flat-square" alt="MAIN + ISOLATED world">
   <img src="https://img.shields.io/badge/platform-Chrome-yellow?style=flat-square&logo=googlechrome&logoColor=white" alt="Chrome">
@@ -37,7 +37,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/tests-60_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-63_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
   <img src="https://img.shields.io/badge/tested_with-Vitest-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest">
   <img src="https://img.shields.io/badge/DOM-jsdom-15a2bb?style=flat-square" alt="jsdom">
   <img src="https://img.shields.io/badge/build-no_build_step-brightgreen?style=flat-square" alt="No Build Step">
@@ -61,7 +61,7 @@ Die Extension scannt LinkedIn-Suchergebnisse nach "Vernetzen"-Buttons und sendet
 - Mehrstufige, sprachunabhängige Button-Erkennung: `aria-label`-Muster, sichtbarer Text (6 Sprachen) **und** `href`-Heuristik (`search-custom-invite`), plus Legacy-`data-view-name`-Strategie
 - Robuste Profil-ID-Extraktion: `componentkey="SearchResults…"` **oder** jedes Attribut mit einer `urn:li:fsd_profile:`-ID
 - API-Aufruf an `/voyager/api/voyagerRelationshipsDashMemberRelationships`
-- Click-Fallback mit `realClick()` (mousedown/mouseup/click Events) wenn die API fehlschlägt
+- Click-Fallback mit `realClick()` (volle Pointer-+Maus-Event-Sequenz) wenn die API fehlschlägt
 - Rate-Limiting: 1 Anfrage alle 1,5 Sekunden
 - Automatische 60s-Pause bei LinkedIn 429 Rate-Limit
 - CSRF-Token aus `JSESSIONID`-Cookie (bei jedem Request frisch eingesetzt)
@@ -155,7 +155,7 @@ npm install
 npm test
 ```
 
-**60 Unit- und Integrationstests** mit Vitest + jsdom:
+**63 Unit- und Integrationstests** mit Vitest + jsdom:
 - `test/lib.test.js` — Kernfunktionen, Self-Healing-Helfer (Recipe-Bau, Invite-Erkennung), Mehrsprachen-Erkennung
 - `test/content.test.js` — Integrationstests für Message-Handling und DOM-Interaktion
 - `test/popup.test.js` — Popup-UI und Chrome-API-Tests
@@ -172,6 +172,13 @@ npx vitest run -t "buildInviteRequest"
 - **Release** — Bei Push eines `v*`-Tags werden Tests ausgeführt und ein GitHub Release mit ZIP erstellt
 
 ## Changelog
+
+### 2.7.3 — Pointer-Events & Anti-Blockade
+- 🛠️ **FIX:** `realClick()` sendet jetzt eine volle Pointer-+Maus-Sequenz (`pointerdown`/`pointerup` + Koordinaten) — LinkedIns neue SDUI-(React-)Buttons reagieren nur auf Pointer-Events, reine MouseEvents wurden ignoriert (Klick-Fallback tat „nichts")
+- 🛠️ **FIX:** Karten ohne Profil-ID, bei denen der Klick-Fallback wiederholt scheitert, werden nach 3 Versuchen übersprungen (`data-lc-fails`) — vorher blockierte eine einzige kaputte Karte den gesamten Lauf endlos
+- 🛠️ **FIX:** Bestätigungs-Klick wird verifiziert (Dialog wirklich zu?) und bis zu 3× wiederholt; hängt der Dialog trotzdem, wird er nach 5 Ticks geschlossen, statt den Lauf zu stoppen
+- ⏱️ Dialog-Wartefenster nach dem Klick von 3 s auf 6 s erhöht (träge Suchseiten)
+- ✅ Testabdeckung von 60 auf 63 erhöht
 
 ### 2.7.2 — Bestätigungsdialog-Fix
 - 🛠️ **FIX:** LinkedIn hat den Dialog-Wortlaut geändert („Ohne **Nachricht** senden" statt „Ohne **Notiz** senden") — Erkennung matcht jetzt beide Varianten per Regex in allen 7 Sprachen, verankert, sodass der Nachbar-Button („Nachricht senden") nie getroffen wird

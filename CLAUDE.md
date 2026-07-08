@@ -44,18 +44,18 @@ Two content-script worlds + the popup. The split between `lib.js` and `content.j
 
 ### Connection flow (per tick)
 
-1. If a confirm dialog is already open (`findConfirmButton`), click it and return.
+1. If a confirm dialog is already open (`findConfirmButton`), click it and return. If it survives 5 consecutive ticks (confirm click not registering), the modal's dismiss button is clicked instead so the run doesn't stall (`stuckDialogTicks`).
 2. Find next unprocessed connect button (`findNextConnect(processedProfiles)`).
 3. Extract profile ID (`getProfileId`) and add it to `processedProfiles` **before** acting — this survives LinkedIn's DOM replacement so the same person isn't hit twice.
 4. If a profile ID exists → `sendInvitation()` POSTs to the Voyager API with the CSRF token. Result is `'ok' | 'rate_limited' | 'error'`.
    - `rate_limited` → set `rateLimited`, badge a 60s pause, then auto-resume.
-   - `error` → `clickFallback()` (real-clicks the button, waits up to ~3s for either the confirm dialog or the button text flipping to "Ausstehend"/"Pending" = success).
-5. No profile ID → straight to `clickFallback()`.
+   - `error` → `clickFallback()` (real-clicks the button, waits up to ~6s for either the confirm dialog or the button text flipping to "Ausstehend"/"Pending" = success). A found confirm dialog is clicked via `confirmAndVerify()`: click → verify the dialog actually closed → retry up to 3×.
+5. No profile ID → straight to `clickFallback()`. If nothing at all happens (no dialog, no state change), the failure is counted on the element itself (`data-lc-fails`); after `MAX_CLICK_FAILS` (3) attempts `findNextConnect` skips it, so one broken card can't wedge the run.
 6. On success: increment counter, persist to storage, and replace the button with an animated 🍻 emoji (`makeBeerEmoji()` in content.js): M3-Expressive gravity drop with squash-&-stretch bounces + amber shockwave ring, hover shows a custom fixed-position tooltip ("🍻 Networking, bottled and served by LinkedIn Spider", viewport-clamped, auto-flips below when there's no room above). Full `prefers-reduced-motion` guard.
 
 ### Why `realClick()`
 
-LinkedIn's Ember framework ignores plain `.click()`. `realClick()` dispatches `mousedown`/`mouseup`/`click` MouseEvents in sequence.
+LinkedIn's Ember framework ignores plain `.click()`, and the newer SDUI (React) components only respond to **pointer** events — plain MouseEvents are silently ignored. `realClick()` therefore dispatches a full sequence (`pointerover`/`pointerdown`/`mousedown`/`pointerup`/`mouseup`/`click`) with real element-center coordinates and `view`, plus a `focus()` beforehand. It falls back to constructing events without `view` in environments that reject it (vitest's jsdom), and skips PointerEvents where the constructor doesn't exist.
 
 ## LinkedIn Voyager API call
 
@@ -83,4 +83,4 @@ If `sendMessage` hits `chrome.runtime.lastError`, the content script isn't loade
 
 ## Versioning
 
-User-facing version lives in `manifest.json` (currently 2.7.2); `package.json` version is independent and lags. Bump `manifest.json` for releases.
+User-facing version lives in `manifest.json` (currently 2.7.3); `package.json` version is independent and lags. Bump `manifest.json` for releases.
