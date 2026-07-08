@@ -1,8 +1,8 @@
 (() => {
   const LOG = '[LC]';
   const {
-    getCsrfToken, getProfileId, findNextConnect, findConfirmButton, realClick,
-    buildInviteRequest, isUsableRecipe, DEFAULT_INVITE_RECIPE, MAX_CLICK_FAILS
+    getCsrfToken, getProfileId, getVanityFromCard, findNextConnect, findConfirmButton,
+    realClick, buildInviteRequest, isUsableRecipe, DEFAULT_INVITE_RECIPE, MAX_CLICK_FAILS
   } = window.LC;
   let active = false;
   let intervalId = null;
@@ -12,6 +12,7 @@
   let learnedRecipe = null; // self-healed invite recipe captured from a live request
   let stuckDialogTicks = 0; // consecutive ticks a confirm dialog refused to close
   const processedProfiles = new Set();
+  const vanityCache = new Map(); // vanity name -> resolved fsd_profile ID (or null)
 
   console.log(LOG, 'Content script loaded on', location.href);
 
@@ -244,6 +245,37 @@
     return 'error';
   }
 
+  // Cards without a profile URN in the DOM: resolve the fsd_profile ID from the
+  // card's /in/<vanity> link via a Voyager profile lookup. This keeps such cards
+  // on the direct API path — no click fallback, no invite overlay needed.
+  async function resolveProfileIdByVanity(vanity) {
+    if (vanityCache.has(vanity)) return vanityCache.get(vanity);
+    let id = null;
+    try {
+      const res = await fetch(
+        '/voyager/api/identity/dash/profiles?q=memberIdentity&memberIdentity=' +
+          encodeURIComponent(vanity),
+        {
+          method: 'GET',
+          headers: {
+            'csrf-token': getCsrfToken(),
+            'x-restli-protocol-version': '2.0.0',
+            accept: 'application/vnd.linkedin.normalized+json+2.1'
+          },
+          credentials: 'include'
+        }
+      );
+      if (res.ok) {
+        const text = await res.text();
+        const m = text.match(/urn:li:fsd_profile:([A-Za-z0-9_=-]+)/);
+        if (m) id = m[1];
+      }
+    } catch (e) { /* network error — fall back to click */ }
+    console.log(LOG, 'Vanity lookup', vanity, '→', id || 'not resolved');
+    vanityCache.set(vanity, id);
+    return id;
+  }
+
   // Clicks the confirm button and verifies the dialog actually closed
   // (retries the click a few times — a single synthetic click can get lost).
   async function confirmAndVerify() {
@@ -341,13 +373,31 @@
     }
 
     const name = connectLink.getAttribute('aria-label') || connectLink.textContent.trim() || 'Unknown';
-    const profileId = getProfileId(connectLink);
+    pending = true;
+    let ok = false;
+
+    let profileId = getProfileId(connectLink);
+
+    // No URN in the DOM? Resolve it from the card's /in/<vanity> profile link so
+    // this card still takes the API path instead of the fragile click fallback.
+    if (!profileId) {
+      const vanity = getVanityFromCard(connectLink);
+      if (vanity) {
+        profileId = await resolveProfileIdByVanity(vanity);
+      }
+    }
+
+    // Vanity-resolved cards can't be filtered inside findNextConnect (no URN in
+    // the DOM) — if this person was already handled, just mark the button.
+    if (profileId && processedProfiles.has(profileId)) {
+      console.log(LOG, 'Already processed', name, '— marking without re-sending');
+      connectLink.replaceWith(makeBeerEmoji());
+      pending = false;
+      return;
+    }
 
     // Track by profile ID to survive DOM replacement
     if (profileId) processedProfiles.add(profileId);
-
-    pending = true;
-    let ok = false;
 
     if (profileId) {
       console.log(LOG, 'Found profileId:', profileId, 'for', name);

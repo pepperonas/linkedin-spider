@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.7.3-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.7.4-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/manifest-v3-green?style=flat-square&logo=googlechrome&logoColor=white" alt="Manifest V3">
   <img src="https://img.shields.io/badge/world-MAIN_%2B_ISOLATED-8957e5?style=flat-square" alt="MAIN + ISOLATED world">
   <img src="https://img.shields.io/badge/platform-Chrome-yellow?style=flat-square&logo=googlechrome&logoColor=white" alt="Chrome">
@@ -37,7 +37,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/tests-63_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-67_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
   <img src="https://img.shields.io/badge/tested_with-Vitest-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest">
   <img src="https://img.shields.io/badge/DOM-jsdom-15a2bb?style=flat-square" alt="jsdom">
   <img src="https://img.shields.io/badge/build-no_build_step-brightgreen?style=flat-square" alt="No Build Step">
@@ -155,7 +155,7 @@ npm install
 npm test
 ```
 
-**63 unit and integration tests** with Vitest + jsdom:
+**67 unit and integration tests** with Vitest + jsdom:
 - `test/lib.test.js` — core functions, self-healing helpers (recipe building, invite detection), multilingual detection
 - `test/content.test.js` — integration tests for message handling and DOM interaction
 - `test/popup.test.js` — popup UI and Chrome API tests
@@ -172,6 +172,11 @@ npx vitest run -t "buildInviteRequest"
 - **Release** — On push of a `v*` tag, tests are run and a GitHub Release with ZIP is created
 
 ## Changelog
+
+### 2.7.4 — Vanity lookup: API path without the overlay
+- ✨ **NEW:** Cards without a profile URN in the DOM are now resolved via the card's profile link (`/in/<vanity>`) + a Voyager lookup (`getVanityFromCard` + `resolveProfileIdByVanity`) — these cards take the direct API path too. The click fallback (and thus the invite overlay, which doesn't even open on some pages) is only needed as a last resort
+- 🛡️ Ambiguity guard: if the container holds links to *different* profiles (= the whole result list), the lookup aborts instead of inviting the wrong person; resolved IDs are cached and checked against duplicate invitations
+- ✅ Test coverage raised from 63 to 67
 
 ### 2.7.3 — Pointer events & anti-wedge
 - 🛠️ **FIX:** `realClick()` now dispatches a full pointer+mouse sequence (`pointerdown`/`pointerup` + coordinates) — LinkedIn's new SDUI (React) buttons only respond to pointer events, so plain MouseEvents were silently ignored (the click fallback did "nothing")

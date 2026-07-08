@@ -97,6 +97,30 @@
     return null;
   }
 
+  // Fallback when no profile URN is in the DOM: find the card's own /in/<vanity>
+  // profile link. Walks up from the connect element; returns the vanity name only
+  // if the containing element has exactly ONE distinct /in/ link — a container
+  // with several (= the whole result list) would risk inviting the wrong person.
+  function getVanityFromCard(connectLink) {
+    let el = connectLink;
+    for (let i = 0; i < 20 && el; i++) {
+      if (el.querySelectorAll) {
+        const links = el.querySelectorAll('a[href*="/in/"]');
+        if (links.length) {
+          const vanities = new Set();
+          for (const a of links) {
+            const m = (a.getAttribute('href') || '').match(/\/in\/([^/?#]+)/);
+            if (m) vanities.add(decodeURIComponent(m[1]));
+          }
+          if (vanities.size === 1) return vanities.values().next().value;
+          if (vanities.size > 1) return null; // ambiguous container — abort
+        }
+      }
+      el = el.parentElement;
+    }
+    return null;
+  }
+
   function isConnectButton(el) {
     const text = el.textContent.trim();
     if (CONNECT_TEXTS.includes(text)) return true;
@@ -261,6 +285,7 @@
   const LC = {
     getCsrfToken,
     getProfileId,
+    getVanityFromCard,
     isConnectButton,
     findNextConnect,
     findConfirmButton,

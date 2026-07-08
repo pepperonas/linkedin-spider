@@ -50,7 +50,7 @@ Two content-script worlds + the popup. The split between `lib.js` and `content.j
 4. If a profile ID exists → `sendInvitation()` POSTs to the Voyager API with the CSRF token. Result is `'ok' | 'rate_limited' | 'error'`.
    - `rate_limited` → set `rateLimited`, badge a 60s pause, then auto-resume.
    - `error` → `clickFallback()` (real-clicks the button, waits up to ~6s for either the confirm dialog or the button text flipping to "Ausstehend"/"Pending" = success). A found confirm dialog is clicked via `confirmAndVerify()`: click → verify the dialog actually closed → retry up to 3×.
-5. No profile ID → straight to `clickFallback()`. If nothing at all happens (no dialog, no state change), the failure is counted on the element itself (`data-lc-fails`); after `MAX_CLICK_FAILS` (3) attempts `findNextConnect` skips it, so one broken card can't wedge the run.
+5. No profile ID in the DOM → resolve it from the card's `/in/<vanity>` profile link (`getVanityFromCard` in lib.js — aborts if the container holds links to *different* profiles, so the whole result list can never be mistaken for a card) via a Voyager profile lookup (`resolveProfileIdByVanity` in content.js, response regex-scanned for `urn:li:fsd_profile:`, cached in `vanityCache`). Resolved IDs are checked against `processedProfiles` before sending (findNextConnect can't filter these itself — no URN in the DOM). Only if that fails too → `clickFallback()`. If nothing at all happens there (no dialog, no state change), the failure is counted on the element itself (`data-lc-fails`); after `MAX_CLICK_FAILS` (3) attempts `findNextConnect` skips it, so one broken card can't wedge the run.
 6. On success: increment counter, persist to storage, and replace the button with an animated 🍻 emoji (`makeBeerEmoji()` in content.js): M3-Expressive gravity drop with squash-&-stretch bounces + amber shockwave ring, hover shows a custom fixed-position tooltip ("🍻 Networking, bottled and served by LinkedIn Spider", viewport-clamped, auto-flips below when there's no room above). Full `prefers-reduced-motion` guard.
 
 ### Why `realClick()`
@@ -83,4 +83,4 @@ If `sendMessage` hits `chrome.runtime.lastError`, the content script isn't loade
 
 ## Versioning
 
-User-facing version lives in `manifest.json` (currently 2.7.3); `package.json` version is independent and lags. Bump `manifest.json` for releases.
+User-facing version lives in `manifest.json` (currently 2.7.4); `package.json` version is independent and lags. Bump `manifest.json` for releases.

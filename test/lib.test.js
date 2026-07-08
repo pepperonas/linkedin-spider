@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 // Load lib.js — attaches to globalThis.LC
 await import('../lib.js');
 const {
-  isConnectButton, getProfileId, findNextConnect, findConfirmButton, getCsrfToken, realClick,
+  isConnectButton, getProfileId, getVanityFromCard, findNextConnect, findConfirmButton, getCsrfToken, realClick,
   isInviteRequest, buildInviteRequest, isUsableRecipe, DEFAULT_INVITE_RECIPE
 } = globalThis.LC;
 
@@ -425,6 +425,51 @@ describe('getCsrfToken', () => {
       configurable: true,
     });
     expect(getCsrfToken()).toBe(null);
+  });
+});
+
+describe('getVanityFromCard', () => {
+  beforeEach(clearBody);
+
+  it('extracts the vanity name from the card profile link', () => {
+    const card = document.createElement('div');
+    card.innerHTML = `
+      <a href="https://www.linkedin.com/in/stefan-harich-1a2b3c/?miniProfileUrn=x">Stefan Harich</a>
+      <button>Vernetzen</button>`;
+    document.body.appendChild(card);
+
+    const btn = card.querySelector('button');
+    expect(getVanityFromCard(btn)).toBe('stefan-harich-1a2b3c');
+  });
+
+  it('tolerates several links to the SAME profile (photo + name)', () => {
+    const card = document.createElement('div');
+    card.innerHTML = `
+      <a href="/in/lisa-x/"><img></a>
+      <a href="/in/lisa-x/?origin=SEARCH">Lisa</a>
+      <button>Vernetzen</button>`;
+    document.body.appendChild(card);
+
+    expect(getVanityFromCard(card.querySelector('button'))).toBe('lisa-x');
+  });
+
+  it('returns null when the container holds links to different profiles (ambiguous)', () => {
+    const list = document.createElement('div');
+    list.innerHTML = `
+      <a href="/in/person-one/">One</a>
+      <a href="/in/person-two/">Two</a>
+      <button>Vernetzen</button>`;
+    document.body.appendChild(list);
+
+    expect(getVanityFromCard(list.querySelector('button'))).toBe(null);
+  });
+
+  it('returns null when no /in/ link exists', () => {
+    const card = document.createElement('div');
+    card.innerHTML = '<button>Vernetzen</button>';
+    document.body.appendChild(card);
+
+    expect(getVanityFromCard(card.querySelector('button'))).toBe(null);
   });
 });
 
