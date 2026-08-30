@@ -86,6 +86,9 @@ LinkedIn constantly changes its frontend (CSS classes, DOM structure) and its in
 - Request counter (persistent in `chrome.storage`)
 - API mode indicator in the popup (`default` / `self-healed ✓`)
 - Reset counter
+- 📇 **Contact log** — every sent request is stored permanently (name, date, profile URL, headline, company, location, connection degree, profile ID, send path, search page)
+- ⬇ **CSV export** from the popup — spreadsheet-ready (semicolon + UTF-8 BOM), file name with a date stamp pre-filled in the save dialog
+- 🔁 **Cross-session duplicate guard** — anyone in the log is never asked again
 - Visual status badge (bottom right on page)
 - Successful connections are marked with a 🍻 emoji — with a Material 3 Expressive physics animation (gravity drop, impact squash & decaying bounces) and a custom tooltip on hover
 - Real-time status display in badge
@@ -125,6 +128,25 @@ git clone https://github.com/pepperonas/linkedin-spider.git
 3. Switch the toggle to ON
 4. The badge in the bottom right shows progress in real time
 
+**Exporting contacts:**
+
+Every successful request lands in the log (`Saved contacts` in the popup). **⬇ Export contacts as CSV** opens the save dialog with a suggested name like `linkedin-spider-anfragen-2026-08-30_1432.csv`.
+
+| Column | Content |
+|--------|---------|
+| Datum | Time of the request, local time (`30.08.2026 14:32`) |
+| Name | Name from the result card or the `aria-label` |
+| Profil-URL | `https://www.linkedin.com/in/<vanity>` |
+| Headline | Position line of the result card |
+| Firma | Company link on the card, otherwise split off the headline (`… bei/at/@ …`) |
+| Ort | Location line of the result card |
+| Grad | Connection degree (`1.` / `2.` / `3.`) |
+| Profil-ID | LinkedIn member URN ID |
+| Methode | `api` (direct Voyager call) or `click` (fallback) |
+| Suchseite | URL the request was triggered from |
+
+Card fields are best-effort: if LinkedIn changes its DOM, the affected column stays empty — sending is unaffected. The export reads `chrome.storage` directly, so it also works when the popup is opened over a non-LinkedIn tab. **Clear Log** wipes the log (two clicks) and thereby lifts the duplicate guard.
+
 **Status Badge:**
 - "🕸️ ready" (grey) — Extension loaded, inactive
 - "🕸️ Active (X sent)" (green) — Running, X requests sent
@@ -143,7 +165,7 @@ Two content-script worlds plus the popup:
 | `interceptor.js` | **MAIN** (`document_start`) | Patches `fetch`/`XMLHttpRequest`, captures LinkedIn's invite request, posts the "recipe" via `postMessage` |
 | `lib.js` | ISOLATED | Pure, testable core functions: selectors, recipe building, invite detection |
 | `content.js` | ISOLATED | Orchestration: DOM scan, recipe-driven API calls, click fallback, recipe learning, badge |
-| `popup.html` / `popup.js` | — | Popup UI: toggle, counter, API mode |
+| `popup.html` / `popup.js` | — | Popup UI: toggle, counter, API mode, contact log + CSV export (loads `lib.js` too) |
 | `styles.css` | — | Popup styling |
 | `manifest.json` | — | Chrome Extension Manifest V3 |
 | `icon.png` | — | Extension icon |
@@ -155,10 +177,14 @@ npm install
 npm test
 ```
 
-**67 unit and integration tests** with Vitest + jsdom:
+**136 unit and integration tests** with Vitest + jsdom:
 - `test/lib.test.js` — core functions, self-healing helpers (recipe building, invite detection), multilingual detection
+- `test/export.test.js` — name cleaning, card scraping, CSV generation (quoting, injection guard, BOM), file name, log cap
+- `test/content-log.test.js` — loads `content.js` for real and drives a full tick: a successful send lands in the log with its card data, duplicate guard holds
+- `test/popup-export.test.js` — loads `popup.html` + `popup.js` for real: export download, cancel behaviour, two-step clear
 - `test/content.test.js` — integration tests for message handling and DOM interaction
 - `test/popup.test.js` — popup UI and Chrome API tests
+- `test/release.test.js` — checks the release ZIP contains every file the manifest references
 
 Single file / single test:
 ```bash
@@ -172,6 +198,16 @@ npx vitest run -t "buildInviteRequest"
 - **Release** — On push of a `v*` tag, tests are run and a GitHub Release with ZIP is created
 
 ## Changelog
+
+### 2.8.0 — Contact log & CSV export
+
+- Every successfully sent request is logged to `chrome.storage.local` (name, timestamp, profile URL, headline, company, location, connection degree, profile ID, send path, search page)
+- **CSV export in the popup**: semicolon-separated with a UTF-8 BOM (German Excel opens it straight into columns), file name with a date stamp pre-filled in the save dialog
+- Guard against CSV formula injection — scraped names end up in a spreadsheet
+- **Cross-session duplicate guard**: already-contacted profiles are not asked again after a reload
+- New `downloads` permission
+- **Release ZIP fixed**: `interceptor.js` had been missing from the packaging since 2.7.0 even though the manifest declares it as a content script — the ZIPs of releases 2.7.0–2.7.4 are therefore incomplete. A test now pins that the ZIP contains every file the manifest references
+- Test suite grown from 67 to 136 tests, every new assertion mutation-tested
 
 ### 2.7.4 — Vanity lookup: API path without the overlay
 - ✨ **NEW:** Cards without a profile URN in the DOM are now resolved via the card's profile link (`/in/<vanity>`) + a Voyager lookup (`getVanityFromCard` + `resolveProfileIdByVanity`) — these cards take the direct API path too. The click fallback (and thus the invite overlay, which doesn't even open on some pages) is only needed as a last resort

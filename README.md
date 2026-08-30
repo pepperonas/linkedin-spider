@@ -86,6 +86,9 @@ LinkedIn ändert sein Frontend (CSS-Klassen, DOM-Struktur) und seine internen AP
 - Anfragen-Zähler (persistent in `chrome.storage`)
 - API-Modus-Anzeige im Popup (`default` / `self-healed ✓`)
 - Counter zurücksetzen
+- 📇 **Kontaktprotokoll** — jede gesendete Anfrage wird dauerhaft gespeichert (Name, Datum, Profil-URL, Headline, Firma, Ort, Kontaktgrad, Profil-ID, Sendeweg, Suchseite)
+- ⬇ **CSV-Export** aus dem Popup — Excel-fertig (Semikolon + UTF-8-BOM), Dateiname mit Datumsstempel als Vorschlag
+- 🔁 **Duplikatsperre über Sessions** — wer einmal im Protokoll steht, wird nie erneut angefragt
 - Visuelles Status-Badge (unten rechts auf der Seite)
 - Erfolgreiche Vernetzungen werden mit 🍻-Emoji markiert — mit Material-3-Expressive-Physik-Animation (Fall mit Gravitation, Aufprall-Squash & abklingende Bounces) und Custom-Tooltip beim Hover
 - Echtzeit-Statusanzeige im Badge
@@ -125,6 +128,25 @@ git clone https://github.com/pepperonas/linkedin-spider.git
 3. Toggle auf AN schalten
 4. Badge unten rechts zeigt Fortschritt in Echtzeit
 
+**Kontakte exportieren:**
+
+Jede erfolgreiche Anfrage landet im Protokoll (`Saved contacts` im Popup). **⬇ Export contacts as CSV** öffnet den Speichern-Dialog mit einem vorgeschlagenen Namen wie `linkedin-spider-anfragen-2026-08-30_1432.csv`.
+
+| Spalte | Inhalt |
+|--------|--------|
+| Datum | Zeitpunkt der Anfrage, lokale Zeit (`30.08.2026 14:32`) |
+| Name | Name aus der Trefferkarte bzw. dem `aria-label` |
+| Profil-URL | `https://www.linkedin.com/in/<vanity>` |
+| Headline | Positionszeile der Trefferkarte |
+| Firma | Firmen-Link der Karte, sonst aus der Headline (`… bei/at/@ …`) |
+| Ort | Ortszeile der Trefferkarte |
+| Grad | Kontaktgrad (`1.` / `2.` / `3.`) |
+| Profil-ID | LinkedIn-Member-URN-ID |
+| Methode | `api` (direkter Voyager-Call) oder `click` (Fallback) |
+| Suchseite | URL, auf der die Anfrage ausgelöst wurde |
+
+Die Karten-Felder sind Best-Effort: Ändert LinkedIn sein DOM, bleibt die betroffene Spalte leer — der Versand läuft unverändert weiter. Der Export liest direkt aus `chrome.storage` und funktioniert deshalb auch, wenn das Popup über einem Nicht-LinkedIn-Tab geöffnet wird. **Clear Log** löscht das Protokoll (zwei Klicks) und hebt damit auch die Duplikatsperre auf.
+
 **Status-Badge:**
 - "🕸️ ready" (grau) — Extension geladen, inaktiv
 - "🕸️ Active (X sent)" (grün) — Läuft, X Anfragen versendet
@@ -143,7 +165,7 @@ Zwei Content-Script-Welten plus Popup:
 | `interceptor.js` | **MAIN** (`document_start`) | Patcht `fetch`/`XMLHttpRequest`, schneidet LinkedIns Invite-Request mit, schickt das "Recipe" per `postMessage` |
 | `lib.js` | ISOLATED | Reine, testbare Kernfunktionen: Selektoren, Recipe-Bau, Invite-Erkennung |
 | `content.js` | ISOLATED | Orchestrierung: DOM-Scan, recipe-getriebene API-Calls, Click-Fallback, Recipe-Lernen, Badge |
-| `popup.html` / `popup.js` | — | Popup-UI: Toggle, Counter, API-Modus |
+| `popup.html` / `popup.js` | — | Popup-UI: Toggle, Counter, API-Modus, Kontaktprotokoll + CSV-Export (lädt `lib.js` mit) |
 | `styles.css` | — | Popup-Styling |
 | `manifest.json` | — | Chrome Extension Manifest V3 |
 | `icon.png` | — | Extension-Icon |
@@ -155,10 +177,14 @@ npm install
 npm test
 ```
 
-**67 Unit- und Integrationstests** mit Vitest + jsdom:
+**136 Unit- und Integrationstests** mit Vitest + jsdom:
 - `test/lib.test.js` — Kernfunktionen, Self-Healing-Helfer (Recipe-Bau, Invite-Erkennung), Mehrsprachen-Erkennung
+- `test/export.test.js` — Namensschälung, Kartenextraktion, CSV-Erzeugung (Quoting, Injection-Schutz, BOM), Dateiname, Protokoll-Deckel
+- `test/content-log.test.js` — lädt `content.js` echt und fährt einen kompletten Tick: erfolgreicher Send landet mit Kartendaten im Protokoll, Duplikatsperre greift
+- `test/popup-export.test.js` — lädt `popup.html` + `popup.js` echt: Export-Download, Abbruch-Verhalten, Zwei-Schritt-Löschen
 - `test/content.test.js` — Integrationstests für Message-Handling und DOM-Interaktion
 - `test/popup.test.js` — Popup-UI und Chrome-API-Tests
+- `test/release.test.js` — prüft, dass das Release-ZIP jede vom Manifest referenzierte Datei enthält
 
 Einzelne Datei / einzelner Test:
 ```bash
@@ -172,6 +198,16 @@ npx vitest run -t "buildInviteRequest"
 - **Release** — Bei Push eines `v*`-Tags werden Tests ausgeführt und ein GitHub Release mit ZIP erstellt
 
 ## Changelog
+
+### 2.8.0 — Kontaktprotokoll & CSV-Export
+
+- Jede erfolgreich gesendete Anfrage wird in `chrome.storage.local` protokolliert (Name, Zeitstempel, Profil-URL, Headline, Firma, Ort, Kontaktgrad, Profil-ID, Sendeweg, Suchseite)
+- **CSV-Export im Popup**: Semikolon-getrennt mit UTF-8-BOM (deutsches Excel öffnet die Datei direkt in Spalten), Dateiname mit Datumsstempel als Vorschlag im Speichern-Dialog
+- Schutz gegen CSV-Formel-Injection — gescrapte Namen landen in einer Tabellenkalkulation
+- **Duplikatsperre über Sessions**: bereits angefragte Profile werden nach einem Reload nicht erneut kontaktiert
+- Neue Permission `downloads`
+- **Release-ZIP repariert**: `interceptor.js` fehlte seit 2.7.0 in der Paketierung, obwohl das Manifest es als Content-Script deklariert — die ZIPs der Releases 2.7.0–2.7.4 sind dadurch unvollständig. Ein Test hält jetzt fest, dass das ZIP jede vom Manifest referenzierte Datei enthält
+- Testsuite von 67 auf 136 Tests, alle neuen Zusicherungen mutationsgeprüft
 
 ### 2.7.4 — Vanity-Lookup: API-Weg ohne Overlay
 - ✨ **NEU:** Karten ohne Profil-URN im DOM werden jetzt über den Profil-Link der Karte (`/in/<vanity>`) + einen Voyager-Lookup aufgelöst (`getVanityFromCard` + `resolveProfileIdByVanity`) — auch diese Karten gehen den direkten API-Weg. Der Klick-Fallback (und damit das Einladungs-Overlay, das sich auf manchen Seiten gar nicht öffnet) wird nur noch als letzte Reserve gebraucht

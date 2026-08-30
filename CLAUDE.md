@@ -30,10 +30,10 @@ Debug via DevTools Console on the LinkedIn tab — all logs prefixed with `[LC]`
 
 Two content-script worlds + the popup. The split between `lib.js` and `content.js` is the key thing to understand:
 
-- **`lib.js`** (isolated world) — All pure / DOM-query / recipe helpers, wrapped in a UMD-style IIFE. Exposed on `window.LC` for the extension *and* `module.exports` for tests (so the same file is the unit-test target). Contains: `getCsrfToken`, `getProfileId`, `isConnectButton`, `findNextConnect`, `findConfirmButton`, `realClick`, plus the self-healing helpers `isInviteRequest`, `buildInviteRequest`, `isUsableRecipe` and `DEFAULT_INVITE_RECIPE`. **Loaded before `content.js`** (see `manifest.json` `content_scripts.js` order). Put any logic you'd want to unit-test here, not in `content.js`.
+- **`lib.js`** (isolated world) — All pure / DOM-query / recipe helpers, wrapped in a UMD-style IIFE. Exposed on `window.LC` for the extension *and* `module.exports` for tests (so the same file is the unit-test target). Contains: `getCsrfToken`, `getProfileId`, `isConnectButton`, `findNextConnect`, `findConfirmButton`, `realClick`, the self-healing helpers `isInviteRequest`, `buildInviteRequest`, `isUsableRecipe`, `DEFAULT_INVITE_RECIPE`, plus the contact-log/export helpers `cleanName`, `findCardRoot`, `extractCardInfo`, `buildRecord`, `toCsv`, `csvDataUrl`, `csvFilename`, `appendRecord`, `profileIdsFromLog`. **Loaded before `content.js`** (see `manifest.json` `content_scripts.js` order) **and also by `popup.html`**, which needs the CSV helpers. Put any logic you'd want to unit-test here, not in `content.js`.
 - **`content.js`** (isolated world) — Stateful orchestration IIFE. Pulls helpers off `window.LC`, runs a 1.5s `setInterval` (`tick()`). Holds runtime state: `active`, `pending` (in-flight guard), `rateLimited`, `count`, `learnedRecipe`, and `processedProfiles` (a `Set` of profile IDs). Owns the recipe-driven network call (`sendInvitation` → `trySendWithRecipe`, preferring `learnedRecipe` then `DEFAULT_INVITE_RECIPE`), the `clickFallback`, the badge, the `window.message` listener that receives captured recipes, and the popup message listener.
 - **`interceptor.js`** (**MAIN world**, `run_at: document_start`) — Patches `window.fetch` and `XMLHttpRequest` to detect LinkedIn's own "send invitation" request, capture URL/headers/body, and `window.postMessage` the recipe to `content.js`. Runs in the page world so it can see the page's own network calls; **cannot** use `window.LC` (different world), so its invite-detection heuristic is duplicated from `lib.js`'s `isInviteRequest` — keep the two in sync.
-- **`popup.html` / `popup.js`** — Popup UI. Talks to the content script via `chrome.tabs.sendMessage`, polls status every 1s while open. Shows API mode (`default` vs `self-healed ✓`). State (`lcEnabled`, `lcCount`, `lcRecipe`) persisted in `chrome.storage.local`.
+- **`popup.html` / `popup.js`** — Popup UI. Talks to the content script via `chrome.tabs.sendMessage`, polls status every 1s while open. Shows API mode (`default` vs `self-healed ✓`), the contact-log size, and owns the CSV export. Loads `lib.js` **before** `popup.js` (a contract pinned in `test/popup-export.test.js` — without it `LC` is undefined and the export button throws). State (`lcEnabled`, `lcCount`, `lcRecipe`, `lcLog`) persisted in `chrome.storage.local`.
 - **`styles.css`** — Popup styling only (NOT injected into LinkedIn). Styles for the in-page 🍻 marker/tooltip live in `content.js` (`injectStyles()` appends a `<style id="lc-styles">` once on first success).
 
 ### Self-healing recipe flow
@@ -41,6 +41,20 @@ Two content-script worlds + the popup. The split between `lib.js` and `content.j
 1. `sendInvitation` tries `learnedRecipe` (if any), then `DEFAULT_INVITE_RECIPE`. Each recipe is turned into a concrete request by `buildInviteRequest`, which substitutes the target `urn:li:fsd_profile:<id>` and always injects a fresh CSRF token (a captured token may be stale).
 2. A learned recipe that returns a non-429 error is treated as stale and discarded (so the next click re-teaches one).
 3. On API failure → `clickFallback` clicks LinkedIn's real Connect button → LinkedIn issues its own invite request → `interceptor.js` captures it → `content.js` stores it as `learnedRecipe` (memory + `chrome.storage`) → future sends fast-path via the learned recipe.
+
+### Contact log + CSV export (v2.8.0)
+
+Every successful request is appended to `chrome.storage.local['lcLog']` — an array of
+`{ ts, name, profileUrl, headline, company, location, degree, profileId, method, pageUrl }`, FIFO-capped at `LOG_CAP` (5000).
+
+- **The card is scraped BEFORE the send** (`extractCardInfo` in `tick()`, stored in `cardInfo`). LinkedIn replaces the card markup on success — reading afterwards yields nothing. Every field degrades to `''`; a LinkedIn DOM change empties a column, it never breaks the send.
+- `method` records which path won: `'api'` (Voyager recipe) or `'click'` (fallback).
+- **Writes re-read the log first** (`logRecord` does a fresh `storage.get` before `set`) so a second LinkedIn tab's entries aren't clobbered by a stale in-memory copy.
+- **Cross-session duplicate guard:** on load, `profileIdsFromLog(lcLog)` seeds `processedProfiles`, so `findNextConnect` skips anyone already contacted. `clearLog` clears both the store and the in-memory set — otherwise the popup would wipe the log while the tab keeps skipping the very people it just forgot.
+- **CSV** (`toCsv`): semicolon-separated with a UTF-8 BOM (what German Excel opens into columns without an import wizard), CRLF rows, every field quoted, inner quotes doubled, newlines/tabs flattened to spaces, and a **formula-injection guard** (leading `= + - @` gets an apostrophe) — these are scraped names heading into a spreadsheet.
+- **Download** uses `chrome.downloads.download({ saveAs: true })` with a **`data:` URL, not a blob URL**: `saveAs` closes the popup, which revokes any blob URL the popup created before the download starts. A failed API call falls back to an `<a download>` click — but a *cancelled* save dialog must NOT (it reports via `runtime.lastError` containing `CANCELED`, and falling back there would write the file the user just declined).
+- The popup reads `lcLog` **straight from storage**, never through the content script, so the export works with the popup open over any tab.
+- `Reset Counter` only zeroes `lcCount`; `Clear Log` (two-step confirm, no `confirm()` in a popup) wipes `lcLog`.
 
 ### Connection flow (per tick)
 
@@ -78,9 +92,22 @@ Helpers live in `lib.js`; update them there if LinkedIn changes its DOM:
 | `toggle`     | popup → content | `{ enabled: bool }` | `{ ok: true }`      |
 | `getStatus`  | popup → content | —                   | `{ active, count, healed }` |
 | `resetCount` | popup → content | —                   | `{ ok: true }`      |
+| `clearLog`   | popup → content | —                   | `{ ok: true }`      |
 
 If `sendMessage` hits `chrome.runtime.lastError`, the content script isn't loaded — the popup silently no-ops (user must reload the tab).
 
+## Releasing
+
+`git tag vX.Y.Z && git push --tags` triggers `.github/workflows/release.yml`: tests → ZIP → GitHub Release.
+
+⚠️ **The ZIP is a hand-maintained `cp` list, not a glob.** `interceptor.js` was added in v2.7.0 and never made it into that list, so the published ZIPs for **v2.7.0–v2.7.4 shipped without it** while `manifest.json` declared it as a content script. Fixed in v2.8.0, and `test/release.test.js` now pins that the `cp` line covers every file `manifest.json` and `popup.html` reference — add a new runtime file, and the suite goes red until the workflow ships it.
+
 ## Versioning
 
-User-facing version lives in `manifest.json` (currently 2.7.4); `package.json` version is independent and lags. Bump `manifest.json` for releases.
+User-facing version lives in `manifest.json` (currently 2.8.0); `package.json` version is independent and lags. Bump `manifest.json` for releases.
+
+## Testing conventions
+
+`test/lib.test.js` + `test/export.test.js` cover the pure/DOM helpers. `test/content-log.test.js` and `test/popup-export.test.js` load `content.js` and `popup.html`+`popup.js` **for real** in jsdom (chrome + `fetch` stubbed, fake timers) rather than re-implementing the logic — the older `test/content.test.js` / `test/popup.test.js` only simulate it, so a change there can pass while the shipped file is broken.
+
+⚠️ **Mutate every new assertion once.** A test you have not watched fail is not a guarantee. This bit during v2.8.0: the "ignores duplicate visually-hidden text" test asserted only the name — which `firstLine` returns with or without dedupe, so removing the dedupe left it green. It is now anchored on the location column, which is what the dedupe actually buys.

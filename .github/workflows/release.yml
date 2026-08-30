@@ -27,7 +27,7 @@ jobs:
           TAG_NAME: ${{ github.ref_name }}
         run: |
           mkdir -p dist/linkedin-spider
-          cp manifest.json lib.js content.js popup.html popup.js styles.css icon.png dist/linkedin-spider/
+          cp manifest.json interceptor.js lib.js content.js popup.html popup.js styles.css icon.png dist/linkedin-spider/
           cd dist && zip -r "linkedin-spider-${TAG_NAME}.zip" linkedin-spider/
 
       - name: Create GitHub Release

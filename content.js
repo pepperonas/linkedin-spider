@@ -2,7 +2,8 @@
   const LOG = '[LC]';
   const {
     getCsrfToken, getProfileId, getVanityFromCard, findNextConnect, findConfirmButton,
-    realClick, buildInviteRequest, isUsableRecipe, DEFAULT_INVITE_RECIPE, MAX_CLICK_FAILS
+    realClick, buildInviteRequest, isUsableRecipe, DEFAULT_INVITE_RECIPE, MAX_CLICK_FAILS,
+    extractCardInfo, buildRecord, appendRecord, profileIdsFromLog, LOG_CAP
   } = window.LC;
   let active = false;
   let intervalId = null;
@@ -336,6 +337,20 @@
     return false;
   }
 
+  // Persist one sent request. The log is re-read immediately before writing so
+  // a second LinkedIn tab's entries aren't clobbered by a stale in-memory copy.
+  function logRecord(cardInfo, profileId, method) {
+    const record = buildRecord(cardInfo, {
+      profileId: profileId || '',
+      method,
+      pageUrl: location.href
+    });
+    chrome.storage.local.get(['lcLog'], (res) => {
+      chrome.storage.local.set({ lcLog: appendRecord(res.lcLog, record, LOG_CAP) });
+    });
+    console.log(LOG, 'Logged contact:', record.name || '(no name)', record.profileUrl);
+  }
+
   async function tick() {
     if (!active || pending) return;
 
@@ -375,6 +390,11 @@
     const name = connectLink.getAttribute('aria-label') || connectLink.textContent.trim() || 'Unknown';
     pending = true;
     let ok = false;
+    let method = '';
+
+    // Snapshot the card BEFORE sending — on success LinkedIn swaps the card
+    // markup out, and then there is nothing left to read about this person.
+    const cardInfo = extractCardInfo(connectLink);
 
     let profileId = getProfileId(connectLink);
 
@@ -405,6 +425,7 @@
 
       if (result === 'ok') {
         ok = true;
+        method = 'api';
       } else if (result === 'rate_limited') {
         console.log(LOG, 'Rate limited by LinkedIn! Pausing for 60s...');
         updateBadge('❌ Rate-Limit! 60s pause...', '#c00');
@@ -421,10 +442,12 @@
         // LinkedIn's own request, which the interceptor captures to self-heal.
         console.log(LOG, 'API failed, trying click fallback');
         ok = await clickFallback(connectLink, name);
+        if (ok) method = 'click';
       }
     } else {
       console.log(LOG, 'No profile ID found, using click fallback for', name);
       ok = await clickFallback(connectLink, name);
+      if (ok) method = 'click';
     }
 
     pending = false;
@@ -432,6 +455,7 @@
     if (ok) {
       count++;
       chrome.storage.local.set({ lcCount: count });
+      logRecord(cardInfo, profileId, method);
       console.log(LOG, 'Request #' + count + ' sent to', name);
       updateBadge('✅ #' + count + ' ' + name.substring(0, 20), '#2e7d32');
 
@@ -472,14 +496,24 @@
       count = 0;
       chrome.storage.local.set({ lcCount: 0 });
       sendResponse({ ok: true });
+    } else if (msg.action === 'clearLog') {
+      // Also drop the in-memory guard, otherwise the popup would clear the log
+      // while this tab silently keeps skipping the very people it just forgot.
+      processedProfiles.clear();
+      chrome.storage.local.set({ lcLog: [] });
+      sendResponse({ ok: true });
     }
   });
 
-  chrome.storage.local.get(['lcCount', 'lcRecipe'], (result) => {
+  chrome.storage.local.get(['lcCount', 'lcRecipe', 'lcLog'], (result) => {
     if (result.lcCount) count = result.lcCount;
     if (result.lcRecipe && isUsableRecipe(result.lcRecipe)) {
       learnedRecipe = result.lcRecipe;
       console.log(LOG, 'Restored learned invite recipe from storage');
     }
+    // Cross-session duplicate guard: nobody already in the log gets asked twice.
+    const known = profileIdsFromLog(result.lcLog);
+    for (const id of known) processedProfiles.add(id);
+    if (known.size) console.log(LOG, 'Skipping', known.size, 'already-contacted profiles');
   });
 })();

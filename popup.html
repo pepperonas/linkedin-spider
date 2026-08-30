@@ -24,12 +24,24 @@
     </div>
 
     <div class="counter-row">
+      <span class="counter-label">Saved contacts</span>
+      <span class="counter-value" id="logged">0</span>
+    </div>
+
+    <div class="counter-row">
       <span class="counter-label">API mode</span>
       <span class="counter-value" id="healed">default</span>
     </div>
 
-    <button id="reset" class="reset-btn">Reset Counter</button>
+    <button id="export" class="primary-btn" disabled>⬇ Export contacts as CSV</button>
+    <p class="hint" id="hint"></p>
+
+    <div class="btn-row">
+      <button id="reset" class="reset-btn">Reset Counter</button>
+      <button id="clearLog" class="reset-btn danger" disabled>Clear Log</button>
+    </div>
   </div>
+  <script src="lib.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
