@@ -41,6 +41,51 @@ describe('versioning', () => {
   });
 });
 
+describe('documentation integrity', () => {
+  const readmes = { 'README.md': readmeDe, 'README_EN.md': readmeEn };
+
+  it('references no image that is missing from the repo', () => {
+    // A dead <img src> renders as a broken icon on GitHub and nobody notices.
+    for (const [name, text] of Object.entries(readmes)) {
+      const local = [...text.matchAll(/<img[^>]+src="([^"]+)"/g)]
+        .map((m) => m[1])
+        .filter((src) => !/^https?:/.test(src));
+      expect(local.length, name + ' references no local image').toBeGreaterThan(0);
+      for (const src of local) {
+        expect(fs.existsSync(path.resolve(src)), name + ' -> missing ' + src).toBe(true);
+      }
+    }
+  });
+
+  it('gives every screenshot alt text', () => {
+    for (const [name, text] of Object.entries(readmes)) {
+      for (const tag of text.match(/<img[^>]*>/g) || []) {
+        expect(tag, name + ': <img> without alt').toMatch(/alt="[^"]+"/);
+      }
+    }
+  });
+
+  it('lists every test file, in both languages', () => {
+    // The Tests section drifts silently as suites are added.
+    const files = fs.readdirSync(path.resolve('test')).filter((f) => f.endsWith('.test.js'));
+    expect(files.length).toBeGreaterThan(5);
+    for (const [name, text] of Object.entries(readmes)) {
+      for (const f of files) {
+        expect(text, name + ' does not mention test/' + f).toContain('test/' + f);
+      }
+    }
+  });
+
+  it('documents no test file that no longer exists', () => {
+    const files = new Set(fs.readdirSync(path.resolve('test')));
+    for (const [name, text] of Object.entries(readmes)) {
+      for (const m of text.matchAll(/`test\/([\w.-]+\.test\.js)`/g)) {
+        expect(files.has(m[1]), name + ' documents a gone file: ' + m[1]).toBe(true);
+      }
+    }
+  });
+});
+
 describe('footer contract', () => {
   it('carries the exact links the product promises', () => {
     expect(popupHtml).toContain('href="https://celox.io"');

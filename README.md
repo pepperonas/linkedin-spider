@@ -37,7 +37,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/tests-283_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-287_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
   <img src="https://img.shields.io/badge/tested_with-Vitest-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest">
   <img src="https://img.shields.io/badge/DOM-jsdom-15a2bb?style=flat-square" alt="jsdom">
   <img src="https://img.shields.io/badge/build-no_build_step-brightgreen?style=flat-square" alt="No Build Step">
@@ -128,6 +128,16 @@ git clone https://github.com/pepperonas/linkedin-spider.git
 
 ## Verwendung
 
+<p align="center">
+  <img src="screenshot-popup.png" width="302" alt="Popup: Wochenkontingent 164 von 200 mit orangem Balken, Verlaufs-Chart mit Zeitraum-Chips, Kennzahlen, Export- und Backup-Knoepfe, Footer mit Version und Links">
+</p>
+
+<p align="center">
+  <em>Das Popup im Betrieb. Oben das Wochenkontingent — 164 von 200 verbraucht, der Balken ist
+  ab 80&nbsp;% orange. Darunter der Verlauf (die laufende Spalte ist heller gezeichnet), die drei
+  Kennzahlen, die Exporte und der Footer mit Version und Links.</em>
+</p>
+
 1. LinkedIn-Personensuche öffnen (z.B. `https://www.linkedin.com/search/results/people/`)
 2. Extension-Icon in der Chrome-Toolbar anklicken
 3. Toggle auf AN schalten
@@ -142,6 +152,12 @@ LinkedIn gibt **200 Kontaktanfragen pro Woche** frei. Das Popup zeigt oben, wie 
 - Das Seiten-Badge trägt den Stand dauerhaft mit (`🕸️ ✅ #12 Name · 43/200 wk`), damit das Kontingent genau dann sichtbar ist, wenn Anfragen rausgehen.
 - Beim ersten Start nach dem Update wird die Historie einmalig aus den Zeitstempeln des vorhandenen Protokolls befüllt.
 - Die Extension **stoppt nicht** von selbst bei 200 — die Anzeige informiert, die Entscheidung bleibt beim Nutzer.
+
+> **Warum „Anfragen gesendet" groesser sein kann als „Gespeicherte Kontakte":**
+> Der Zaehler laeuft seit der ersten Installation, das Kontaktprotokoll erst seit **2.8.0**.
+> Kontingent und Chart speisen sich aus dem Protokoll — sie koennen also nicht weiter
+> zurueckreichen als bis zu dem Tag, an dem das Protokoll angelegt wurde. Im Screenshot
+> oben sind das 1259 gesendete Anfragen gegenueber 164 protokollierten.
 
 **Verlauf:**
 
@@ -222,7 +238,7 @@ npm install
 npm test
 ```
 
-**283 Unit- und Integrationstests** mit Vitest + jsdom (Zeitzone in `vitest.config.js` auf `Europe/Berlin` gepinnt — die Kontingent- und Chart-Rechnung ist kalenderlokal, und der Fehler, den naive Millisekunden-Arithmetik erzeugt, existiert nur dort, wo die Uhren wirklich springen):
+**287 Unit- und Integrationstests** mit Vitest + jsdom (Zeitzone in `vitest.config.js` auf `Europe/Berlin` gepinnt — die Kontingent- und Chart-Rechnung ist kalenderlokal, und der Fehler, den naive Millisekunden-Arithmetik erzeugt, existiert nur dort, wo die Uhren wirklich springen):
 - `test/lib.test.js` — Kernfunktionen, Self-Healing-Helfer (Recipe-Bau, Invite-Erkennung), Mehrsprachen-Erkennung
 - `test/export.test.js` — Namensschälung, Kartenextraktion, CSV-Erzeugung (Quoting, Injection-Schutz, BOM), Dateiname, Protokoll-Deckel
 - `test/content-log.test.js` — lädt `content.js` echt und fährt einen kompletten Tick: erfolgreicher Send landet mit Kartendaten im Protokoll, Duplikatsperre greift
@@ -235,7 +251,7 @@ npm test
 - `test/report.test.js` — HTML-Report: Eigenständigkeit (kein Skript, kein externer Verweis), Escaping gescrapter Namen, Kontingent-/Zeitraum-Angaben, Leerzustand
 - `test/styles.test.js` — Kontrast-Untergrenzen (4,5:1 bzw. 3:1) für Popup **und** Report-CSS, Layout-Vertrag der Knopfreihe, jede von `popup.js` gesuchte ID existiert im Markup
 - `test/resilience.test.js` — Verhalten nach einem Extension-Reload (Badge-Hinweis, Timer abgeraeumt, `getStatus` meldet es) + Laufzeit-Deckel fuer den Backfill
-- `test/version.test.js` — SemVer, Gleichstand `manifest.json` ↔ `package.json` ↔ README-Badge, Footer-Vertrag
+- `test/version.test.js` — SemVer, Gleichstand `manifest.json` ↔ `package.json` ↔ README-Badge, Footer-Vertrag, **Doku-Integritaet** (kein toter Bildverweis, jedes Bild mit Alt-Text, beide READMEs listen genau die vorhandenen Test-Dateien)
 - `test/release.test.js` — prüft, dass das Release-ZIP jede vom Manifest referenzierte Datei enthält
 
 Einzelne Datei / einzelner Test:
@@ -292,7 +308,7 @@ einzige Abhilfe ist ein Reload der Seite; genau das steht jetzt da.
 - **Backup & Wiederherstellung** aller Werte als JSON. Der Import ist streng (App-Kennung, Typ, Schema; fremde/kaputte Dateien werden komplett abgelehnt, ohne etwas zu schreiben), Session-Header werden vor dem Schreiben aus dem Recipe entfernt, und ein Restore setzt `Auto-Connect` immer auf AUS
 - **SemVer + Footer** im Popup: Version aus dem Manifest, Links zu celox.io, Google-Maps-Bewertung und PayPal-Spende
 - `manifest.json` und `package.json` tragen ab jetzt dieselbe Version — ein Test hält das fest (sie waren fünf Releases auseinandergelaufen)
-- **Popup kompaktiert**: Chrome deckelt Popups bei 600 px Höhe — mit den neuen Blöcken lag der Footer darunter. Die drei Kennzahlen stehen jetzt als Streifen nebeneinander, Report/Backup/Restore teilen sich eine Reihe (596 px gemessen)
+- **Popup kompaktiert**: Chrome deckelt Popups bei 600 px Höhe — mit den neuen Blöcken lag der Footer darunter. Die drei Kennzahlen stehen jetzt als Streifen nebeneinander, Report/Backup/Restore teilen sich eine Reihe. Gemessen 596–598 px je nach Zustand (die Hinweiszeile ist leer oder belegt); der Screenshot oben zeigt 597 px
 - **Kontrast korrigiert**: der neu eingeführte Grauton lag bei 3,19:1 und damit unter der 4,5:1-Grenze; alle Textrollen messen jetzt 5,0–5,7:1. Ein Test hält die Untergrenze fest — für das Popup **und** für das Report-CSS
 - Testsuite von 136 auf 263 Tests, alle neuen Zusicherungen mutationsgeprüft
 

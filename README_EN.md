@@ -37,7 +37,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/tests-283_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-287_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
   <img src="https://img.shields.io/badge/tested_with-Vitest-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest">
   <img src="https://img.shields.io/badge/DOM-jsdom-15a2bb?style=flat-square" alt="jsdom">
   <img src="https://img.shields.io/badge/build-no_build_step-brightgreen?style=flat-square" alt="No Build Step">
@@ -128,6 +128,16 @@ git clone https://github.com/pepperonas/linkedin-spider.git
 
 ## Usage
 
+<p align="center">
+  <img src="screenshot-popup.png" width="302" alt="Popup: weekly quota 164 of 200 with an amber bar, activity chart with period chips, figures, export and backup buttons, footer with version and links">
+</p>
+
+<p align="center">
+  <em>The popup in use. At the top the weekly quota — 164 of 200 used, the bar turns amber past
+  80&nbsp;%. Below it the activity chart (the running column is drawn lighter), the three figures,
+  the exports, and the footer with the version and the links.</em>
+</p>
+
 1. Open LinkedIn people search (e.g. `https://www.linkedin.com/search/results/people/`)
 2. Click the extension icon in the Chrome toolbar
 3. Switch the toggle to ON
@@ -142,6 +152,11 @@ LinkedIn allows **200 connection requests per week** for free. The top of the po
 - The in-page badge carries the figure permanently (`🕸️ ✅ #12 Name · 43/200 wk`) so the quota is visible exactly while requests are going out.
 - On the first run after the update the history is seeded once from the timestamps already in the contact log.
 - The extension does **not** stop itself at 200 — the display informs, the decision stays with the user.
+
+> **Why "Requests sent" can exceed "Saved contacts":**
+> the counter has been running since the first install, the contact log only since **2.8.0**.
+> The quota and the chart are fed by the log, so they cannot reach further back than the day
+> the log was created. In the screenshot above that is 1259 requests sent against 164 logged.
 
 **Activity:**
 
@@ -222,7 +237,7 @@ npm install
 npm test
 ```
 
-**283 unit and integration tests** with Vitest + jsdom (the timezone is pinned to `Europe/Berlin` in `vitest.config.js` — the quota and chart maths are calendar-local, and the bug naive millisecond arithmetic causes only exists where clocks actually shift):
+**287 unit and integration tests** with Vitest + jsdom (the timezone is pinned to `Europe/Berlin` in `vitest.config.js` — the quota and chart maths are calendar-local, and the bug naive millisecond arithmetic causes only exists where clocks actually shift):
 - `test/lib.test.js` — core functions, self-healing helpers (recipe building, invite detection), multilingual detection
 - `test/export.test.js` — name cleaning, card scraping, CSV generation (quoting, injection guard, BOM), file name, log cap
 - `test/content-log.test.js` — loads `content.js` for real and drives a full tick: a successful send lands in the log with its card data, duplicate guard holds
@@ -235,7 +250,7 @@ npm test
 - `test/report.test.js` — HTML report: self-containment (no script, no external reference), escaping of scraped names, quota/period figures, empty state
 - `test/styles.test.js` — contrast floors (4.5:1 / 3:1) for the popup **and** the report stylesheet, button-row layout contract, every id `popup.js` reaches for exists in the markup
 - `test/resilience.test.js` — behaviour after an extension reload (badge notice, timer torn down, `getStatus` reports it) + a runtime cap on the backfill
-- `test/version.test.js` — SemVer, parity between `manifest.json`, `package.json` and the README badge, footer contract
+- `test/version.test.js` — SemVer, parity between `manifest.json`, `package.json` and the README badge, footer contract, **documentation integrity** (no dead image reference, every image has alt text, both READMEs list exactly the test files that exist)
 - `test/release.test.js` — checks the release ZIP contains every file the manifest references
 
 Single file / single test:
@@ -289,7 +304,7 @@ only cure, so that is what it says now.
 - **Backup & restore** of every stored value as JSON. The import is strict (app marker, type, schema; foreign/damaged files are rejected whole without writing anything), session headers are stripped from the recipe before writing, and a restore always leaves `Auto-Connect` OFF
 - **SemVer + footer** in the popup: version from the manifest, links to celox.io, the Google Maps review page and a PayPal donation
 - `manifest.json` and `package.json` now carry the same version — a test pins it (they had drifted apart across five releases)
-- **Popup compacted**: Chrome caps popups at 600px tall and the new blocks pushed the footer below that. The three figures now sit side by side and Report/Backup/Restore share a row (measured 596px)
+- **Popup compacted**: Chrome caps popups at 600px tall and the new blocks pushed the footer below that. The three figures now sit side by side and Report/Backup/Restore share a row. Measured 596–598px depending on state (the hint line is empty or filled); the screenshot above shows 597px
 - **Contrast fixed**: the muted tone introduced here measured 3.19:1, below the 4.5:1 floor; every text role now measures 5.0–5.7:1. A test pins the floor — for the popup **and** for the report stylesheet
 - Test suite from 136 to 263 tests, every new assertion mutation-probed
 
