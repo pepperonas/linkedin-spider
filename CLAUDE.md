@@ -95,9 +95,23 @@ Helpers live in `lib.js`; update them there if LinkedIn changes its DOM:
 | `clearLog`   | popup → content | —                   | `{ ok: true }`      |
 | `reloadState`| popup → content | —                   | `{ ok: true }`      |
 
+`getStatus` answers `{ active, count, healed, contextGone }`.
+
 `reloadState` is sent after a restore so the tab re-reads storage instead of running on pre-restore counters. It **merges** into `processedProfiles` rather than replacing it — a restore that shrinks the log must not make the current session re-ask people it already contacted.
 
 If `sendMessage` hits `chrome.runtime.lastError`, the content script isn't loaded — the popup silently no-ops (user must reload the tab).
+
+## Surviving an extension reload (v2.9.1)
+
+⚠️ **Updating or reloading the extension orphans the content script in every already-open tab.** It keeps executing, but its link to the extension is severed: `chrome.runtime.id` becomes `undefined` and every `chrome.storage.*` call throws `Extension context invalidated`. Before 2.9.1 that killed the run **silently** — the throw escaped from `tick()` as an unhandled rejection, so there were no sends, no log entries, an unchanged badge, and a popup that could not reach the tab yet still displayed "Paused". It looked exactly like "the extension is broken", and the only cure is reloading the page.
+
+- `contextLost()` / `giveUp()` in `content.js`: all storage access goes through `storageGet`/`storageSet`/`storageRemove`, which check `chrome.runtime.id` first and catch the throw. On the first failure the scan interval is cleared, `active` goes false, and the badge reads **`⚠️ Reload this page`**.
+- ⚠️ **`updateBadge` is a no-op once `contextGone` is set.** Without that, the `✅ #N <name>` line painted immediately afterwards covers the one message explaining why nothing is being recorded. A mutation probe found this in the fix itself.
+- `getStatus` carries `contextGone` so the popup can distinguish "paused" from "nobody is listening".
+- Popup: `tabReachable` drives the status line (`⚠️ Reload the LinkedIn tab`, `.status.warn`, measured 6.26:1) after `MISS_LIMIT` unanswered polls, and the poll backs off `POLL_FAST` 1s → `POLL_SLOW` 5s. It recovers on its own. Quota, chart and all three exports keep working — they read storage, not the tab.
+- ⚠️ **A content-script test stub must define `chrome.runtime.id`.** Without it `contextLost()` is true and the script correctly refuses to start; the pre-2.9.1 stub in `content-log.test.js` had to be fixed, not the guard.
+
+⚠️ **`backfillEvents` must stay one pass + one sort.** The first version appended record by record, and `appendEvent` re-sorts the whole series each call — **619 ms for a 5000-entry log**, growing as n², running synchronously inside the storage callback on every LinkedIn page load. `test/resilience.test.js` caps it at 100 ms for 5000 entries.
 
 ## Weekly quota, activity chart, backup (v2.9.0)
 
@@ -137,6 +151,8 @@ SemVer. The user-facing version lives in `manifest.json` (currently **2.9.0**) a
 
 `test/lib.test.js` + `test/export.test.js` cover the pure/DOM helpers. `test/content-log.test.js` and `test/popup-export.test.js` load `content.js` and `popup.html`+`popup.js` **for real** in jsdom (chrome + `fetch` stubbed, fake timers) rather than re-implementing the logic — the older `test/content.test.js` / `test/popup.test.js` only simulate it, so a change there can pass while the shipped file is broken.
 
-`test/stats.test.js`, `test/backup.test.js`, `test/report.test.js`, `test/styles.test.js` and `test/version.test.js` are pure/file-level — `styles.test.js` reads `styles.css`/`lib.js`/`popup.html` as text and asserts on them (contrast ratios, the button-row arrangement, and that every id `popup.js` calls `getElementById` for actually exists). ⚠️ The report's stylesheet lives inside JS string concatenation in `lib.js`; join the literals (`/'\s*\+\s*\n?\s*'/`) before reading rules out of it, or every rule but the first reads as missing. `test/popup-stats.test.js` loads `popup.html` + `popup.js` for real and stubs `FileReader` with a synchronous stand-in — the point is the popup's own wiring (change → read → parse → arm → confirm), not jsdom's reader.
+`test/stats.test.js`, `test/backup.test.js`, `test/report.test.js`, `test/styles.test.js` and `test/version.test.js` are pure/file-level; `test/resilience.test.js` loads the real `content.js` against a stub whose `chrome.runtime.id` can be revoked mid-run — `styles.test.js` reads `styles.css`/`lib.js`/`popup.html` as text and asserts on them (contrast ratios, the button-row arrangement, and that every id `popup.js` calls `getElementById` for actually exists). ⚠️ The report's stylesheet lives inside JS string concatenation in `lib.js`; join the literals (`/'\s*\+\s*\n?\s*'/`) before reading rules out of it, or every rule but the first reads as missing. `test/popup-stats.test.js` loads `popup.html` + `popup.js` for real and stubs `FileReader` with a synchronous stand-in — the point is the popup's own wiring (change → read → parse → arm → confirm), not jsdom's reader.
+
+⚠️ **An outcome can be reached by more than one mechanism — probe for that.** Two 2.9.1 probes survived at first: removing `clearInterval` still stopped the sends (because `active = false` already gates `tick`), and removing the `try/catch` in `storageSet` still warned (because the test's synchronous storage stub let the *outer* `storageGet` try/catch swallow it). Both assertions were true for the wrong reason. Fixes: assert `vi.getTimerCount()` drops, and break storage only **after** startup so the failing call is the one under test.
 
 ⚠️ **Mutate every new assertion once.** A test you have not watched fail is not a guarantee. This bit during v2.8.0: the "ignores duplicate visually-hidden text" test asserted only the name — which `firstLine` returns with or without dedupe, so removing the dedupe left it green. It is now anchored on the location column, which is what the dedupe actually buys.

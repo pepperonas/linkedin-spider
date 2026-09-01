@@ -314,6 +314,88 @@ describe('popup: backup and restore', () => {
   });
 });
 
+describe('popup: unreachable tab', () => {
+  beforeEach(() => { vi.useFakeTimers(); mountPopup(); setupChrome(); readerText = null; globalThis.FileReader = SyncFileReader; });
+  afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+
+  // No content script in the tab: either it is not a LinkedIn page, or the
+  // extension was reloaded and the page was not. Saying "Paused" is a lie.
+  function silentTab() {
+    chrome.tabs.sendMessage = (_id, msg, cb) => {
+      sentMessages.push(msg);
+      chrome.runtime.lastError = { message: 'Could not establish connection.' };
+      if (cb) cb(undefined);
+      chrome.runtime.lastError = null;
+    };
+  }
+
+  it('tells the user to reload the tab instead of showing "Paused"', async () => {
+    silentTab();
+    await loadPopup();
+    await vi.advanceTimersByTimeAsync(3500);
+    const status = document.getElementById('status');
+    expect(status.textContent).toMatch(/reload/i);
+    expect(status.className).toMatch(/warn/);
+  });
+
+  it('says the same when the tab answers but has given up', async () => {
+    chrome.tabs.sendMessage = (_id, msg, cb) => {
+      sentMessages.push(msg);
+      if (cb) cb(msg.action === 'getStatus'
+        ? { active: false, count: 0, healed: false, contextGone: true } : { ok: true });
+    };
+    await loadPopup();
+    await vi.advanceTimersByTimeAsync(3500);
+    expect(document.getElementById('status').textContent).toMatch(/reload/i);
+  });
+
+  it('stops hammering a tab that does not answer', async () => {
+    silentTab();
+    await loadPopup();
+    await vi.advanceTimersByTimeAsync(3500);
+    const afterWarning = sentMessages.length;
+    await vi.advanceTimersByTimeAsync(4000);
+    // backed off — a 1s poll would have added four more round-trips
+    expect(sentMessages.length - afterWarning).toBeLessThanOrEqual(1);
+  });
+
+  it('recovers on its own once the tab answers again', async () => {
+    silentTab();
+    await loadPopup();
+    await vi.advanceTimersByTimeAsync(3500);
+    expect(document.getElementById('status').textContent).toMatch(/reload/i);
+
+    chrome.tabs.sendMessage = (_id, msg, cb) => {
+      sentMessages.push(msg);
+      if (cb) cb(msg.action === 'getStatus' ? { active: true, count: 5, healed: false } : { ok: true });
+    };
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(document.getElementById('status').textContent).toBe('Active');
+    expect(document.getElementById('counter').textContent).toBe('5');
+  });
+
+  it('keeps quota and chart working while the tab is unreachable', async () => {
+    // They come from storage, not from the tab — the popup must still be useful.
+    storage.lcEvents = [daysAgo(0), daysAgo(0)];
+    storage.lcLog = [contact];
+    silentTab();
+    await loadPopup();
+    await vi.advanceTimersByTimeAsync(3500);
+    expect(document.getElementById('quota-used').textContent).toBe('2');
+    expect(document.querySelectorAll('#chart rect.lc-bar').length).toBe(7);
+    expect(document.getElementById('export').disabled).toBe(false);
+  });
+
+  it('does not pretend a toggle worked when nothing received it', async () => {
+    silentTab();
+    await loadPopup();
+    document.getElementById('toggle').checked = true;
+    document.getElementById('toggle').dispatchEvent(new Event('change'));
+    await vi.advanceTimersByTimeAsync(50);
+    expect(document.getElementById('hint').textContent).toMatch(/reload/i);
+  });
+});
+
 describe('popup: footer', () => {
   beforeEach(() => { vi.useFakeTimers(); mountPopup(); setupChrome(); readerText = null; globalThis.FileReader = SyncFileReader; });
   afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });

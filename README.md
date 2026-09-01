@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.9.0-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.9.1-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/manifest-v3-green?style=flat-square&logo=googlechrome&logoColor=white" alt="Manifest V3">
   <img src="https://img.shields.io/badge/world-MAIN_%2B_ISOLATED-8957e5?style=flat-square" alt="MAIN + ISOLATED world">
   <img src="https://img.shields.io/badge/platform-Chrome-yellow?style=flat-square&logo=googlechrome&logoColor=white" alt="Chrome">
@@ -37,7 +37,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/tests-263_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-283_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
   <img src="https://img.shields.io/badge/tested_with-Vitest-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest">
   <img src="https://img.shields.io/badge/DOM-jsdom-15a2bb?style=flat-square" alt="jsdom">
   <img src="https://img.shields.io/badge/build-no_build_step-brightgreen?style=flat-square" alt="No Build Step">
@@ -199,6 +199,7 @@ Unten im Popup stehen die **Versionsnummer** (SemVer, direkt aus `manifest.json`
 - "🕸️ ✅ #X Name · 43/200 wk" (dunkelgrün) — Erfolgreiche Anfrage; der Zusatz ist der Wochenstand
 - "🕸️ ❌ Rate-Limit! 60s pause..." (rot) — LinkedIn 429, wartet automatisch
 - "🕸️ ❌ No CSRF Token!" (rot) — API-Fehler
+- "🕸️ ⚠️ Reload this page" (rot) — die Extension wurde aktualisiert, dieser Tab laeuft noch auf dem alten Content-Script. **Seite neu laden**, dann laeuft es weiter
 
 ## Architektur
 
@@ -221,7 +222,7 @@ npm install
 npm test
 ```
 
-**263 Unit- und Integrationstests** mit Vitest + jsdom (Zeitzone in `vitest.config.js` auf `Europe/Berlin` gepinnt — die Kontingent- und Chart-Rechnung ist kalenderlokal, und der Fehler, den naive Millisekunden-Arithmetik erzeugt, existiert nur dort, wo die Uhren wirklich springen):
+**283 Unit- und Integrationstests** mit Vitest + jsdom (Zeitzone in `vitest.config.js` auf `Europe/Berlin` gepinnt — die Kontingent- und Chart-Rechnung ist kalenderlokal, und der Fehler, den naive Millisekunden-Arithmetik erzeugt, existiert nur dort, wo die Uhren wirklich springen):
 - `test/lib.test.js` — Kernfunktionen, Self-Healing-Helfer (Recipe-Bau, Invite-Erkennung), Mehrsprachen-Erkennung
 - `test/export.test.js` — Namensschälung, Kartenextraktion, CSV-Erzeugung (Quoting, Injection-Schutz, BOM), Dateiname, Protokoll-Deckel
 - `test/content-log.test.js` — lädt `content.js` echt und fährt einen kompletten Tick: erfolgreicher Send landet mit Kartendaten im Protokoll, Duplikatsperre greift
@@ -233,6 +234,7 @@ npm test
 - `test/popup-stats.test.js` — lädt `popup.html` + `popup.js` echt: Kontingent-Anzeige, Chart + Zeitraumwahl, HTML-Report, Backup-/Restore-Roundtrip, Footer-Links
 - `test/report.test.js` — HTML-Report: Eigenständigkeit (kein Skript, kein externer Verweis), Escaping gescrapter Namen, Kontingent-/Zeitraum-Angaben, Leerzustand
 - `test/styles.test.js` — Kontrast-Untergrenzen (4,5:1 bzw. 3:1) für Popup **und** Report-CSS, Layout-Vertrag der Knopfreihe, jede von `popup.js` gesuchte ID existiert im Markup
+- `test/resilience.test.js` — Verhalten nach einem Extension-Reload (Badge-Hinweis, Timer abgeraeumt, `getStatus` meldet es) + Laufzeit-Deckel fuer den Backfill
 - `test/version.test.js` — SemVer, Gleichstand `manifest.json` ↔ `package.json` ↔ README-Badge, Footer-Vertrag
 - `test/release.test.js` — prüft, dass das Release-ZIP jede vom Manifest referenzierte Datei enthält
 
@@ -248,6 +250,37 @@ npx vitest run -t "buildInviteRequest"
 - **Release** — Bei Push eines `v*`-Tags werden Tests ausgeführt und ein GitHub Release mit ZIP erstellt
 
 ## Changelog
+
+### 2.9.1 — Nach einem Update nicht mehr stumm
+
+Nach einem Extension-Update laeuft im offenen LinkedIn-Tab noch das **alte**
+Content-Script weiter. Sein Zugang zur Extension ist aber weg: jeder
+`chrome.*`-Aufruf wirft `Extension context invalidated`. Bisher fiel der Lauf
+dadurch **lautlos** aus — keine Anfragen, kein Protokoll, unveraendertes Badge,
+und ein Popup, das den Tab nicht erreichte und trotzdem „Paused" anzeigte. Die
+einzige Abhilfe ist ein Reload der Seite; genau das steht jetzt da.
+
+- **Seiten-Badge**: `⚠️ Reload this page` (rot) statt eines eingefrorenen
+  Zustands. Der Hinweis wird danach nicht mehr ueberschrieben — eine spaetere
+  Erfolgsmeldung wuerde die einzige Zeile uebermalen, die erklaert, warum nichts
+  mehr protokolliert wird
+- Der Scan-Timer wird abgeraeumt, statt weiter ins Leere zu laufen
+- `getStatus` meldet `contextGone`, damit das Popup Bescheid weiss
+- **Popup**: Statuszeile sagt `⚠️ Reload the LinkedIn tab` (gemessen 6,26:1),
+  drosselt die Abfrage von 1 s auf 5 s statt einen stummen Tab weiter zu
+  bombardieren, und erholt sich von selbst, sobald der Tab wieder antwortet.
+  Kontingent, Chart und alle Exporte laufen dabei weiter — sie kommen aus dem
+  Speicher, nicht aus dem Tab
+- Der Schalter behauptet nicht mehr, etwas gestartet zu haben, das niemand
+  empfangen hat
+- **Backfill entquadratisiert**: die einmalige Uebernahme der Historie aus dem
+  Kontaktprotokoll sortierte die Reihe bei **jedem** Eintrag neu — gemessen
+  619 ms bei 5000 Eintraegen, mit n² wachsend, synchron bei jedem Seitenaufbau.
+  Jetzt ein Durchlauf und ein Sortiervorgang; ein Test deckelt die Laufzeit
+- Suite 263 → 283 Tests; 13 neue Mutationsproben, alle gefangen. Zwei davon
+  ueberlebten zunaechst und deckten auf, dass die Zusicherungen auch ohne die
+  Korrektur erfuellt waren — nachgeschaerft. Eine davon fand einen echten
+  Fehler in der Korrektur selbst: die Erfolgsmeldung ueberschrieb den Warnhinweis
 
 ### 2.9.0 — Kontingent, Verlauf, Backup
 

@@ -28,12 +28,26 @@ let range = LC.CHART_RANGES[0].key;
 let clearArmed = false;   // "Clear Log" is a two-step confirm (no confirm() in a popup)
 let pendingRestore = null; // a validated backup waiting for the second click
 let lastChartKey = '';    // fingerprint guard — see renderStats()
+let tabReachable = true;  // is a content script answering in the active tab?
+let misses = 0;           // consecutive unanswered status polls
+let pollTimer = null;
 
 const VERSION = (chrome.runtime && chrome.runtime.getManifest)
   ? (chrome.runtime.getManifest().version || '') : '';
 if (versionEl) versionEl.textContent = VERSION ? 'v' + VERSION : '';
 
+const RELOAD_HINT = 'Reload the LinkedIn tab';
+
 function updateUI() {
+  if (!tabReachable) {
+    // Either this is not a LinkedIn page, or the extension was reloaded and the
+    // page was not — the old content script is orphaned and receives nothing.
+    // Showing "Paused" here would be a lie: nothing is listening at all.
+    status.textContent = '⚠️ ' + RELOAD_HINT;
+    status.className = 'status warn';
+    toggle.checked = enabled;
+    return;
+  }
   status.textContent = enabled ? 'Active' : 'Paused';
   status.className = 'status ' + (enabled ? 'active' : '');
   toggle.checked = enabled;
@@ -275,7 +289,13 @@ function applyRestore() {
 // --- Buttons ----------------------------------------------------------------
 toggle.addEventListener('change', async () => {
   enabled = toggle.checked;
-  await sendMessage({ action: 'toggle', enabled });
+  const resp = await sendMessage({ action: 'toggle', enabled });
+  if (!resp) {
+    // Never let the switch imply something started that nobody received.
+    tabReachable = false;
+    enabled = false;
+    say(RELOAD_HINT + ' — nothing is listening on this page.', true);
+  }
   updateUI();
   chrome.storage.local.set({ lcEnabled: enabled });
 });
@@ -307,16 +327,36 @@ clearBtn.addEventListener('click', async () => {
   });
 });
 
-// Poll status every second while popup is open
+// Poll the tab for its live state. Quota, chart and the exports come from
+// storage and keep working even when no content script answers.
+const POLL_FAST = 1000;
+const POLL_SLOW = 5000;   // back off rather than hammer a tab with no listener
+const MISS_LIMIT = 3;
+
 async function refreshStatus() {
   const resp = await sendMessage({ action: 'getStatus' });
-  if (resp) {
+
+  if (resp && !resp.contextGone) {
+    misses = 0;
+    tabReachable = true;
     enabled = resp.active;
     counter.textContent = resp.count;
     if (healed) healed.textContent = resp.healed ? 'self-healed ✓' : 'default';
-    updateUI();
+  } else {
+    misses++;
+    if (misses >= MISS_LIMIT) {
+      tabReachable = false;
+      enabled = false;
+    }
   }
+  updateUI();
   loadState();
+  schedulePoll();
+}
+
+function schedulePoll() {
+  clearTimeout(pollTimer);
+  pollTimer = setTimeout(refreshStatus, tabReachable ? POLL_FAST : POLL_SLOW);
 }
 
 // Initial load
@@ -328,4 +368,3 @@ chrome.storage.local.get(['lcEnabled', 'lcCount'], (result) => {
 
 loadState();
 refreshStatus();
-setInterval(refreshStatus, 1000);

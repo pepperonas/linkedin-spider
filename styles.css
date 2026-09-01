@@ -92,6 +92,12 @@ input:checked + .slider::before {
   color: #2e7d32;
 }
 
+.status.warn {
+  background: #fff4e5;
+  color: #8a4b00;
+  font-weight: 600;
+}
+
 .reset-btn {
   width: 100%;
   padding: 8px;

@@ -4,7 +4,7 @@
     getCsrfToken, getProfileId, getVanityFromCard, findNextConnect, findConfirmButton,
     realClick, buildInviteRequest, isUsableRecipe, DEFAULT_INVITE_RECIPE, MAX_CLICK_FAILS,
     extractCardInfo, buildRecord, appendRecord, profileIdsFromLog, LOG_CAP,
-    appendEvent, weekQuota
+    appendEvent, backfillEvents, weekQuota
   } = window.LC;
   let active = false;
   let intervalId = null;
@@ -13,6 +13,7 @@
   let rateLimited = false;
   let learnedRecipe = null; // self-healed invite recipe captured from a live request
   let stuckDialogTicks = 0; // consecutive ticks a confirm dialog refused to close
+  let contextGone = false;  // the extension was reloaded out from under this page
   const processedProfiles = new Set();
   const vanityCache = new Map(); // vanity name -> resolved fsd_profile ID (or null)
 
@@ -53,6 +54,10 @@
   }
 
   function updateBadge(text, color) {
+    // Once we have given up, the reload notice is the only thing worth showing:
+    // a later "sent" message would paint over the one line that explains why
+    // nothing is being recorded any more.
+    if (contextGone) return;
     badgeText = text;
     badgeColor = color || '#333';
     renderBadge();
@@ -62,6 +67,54 @@
     const q = weekQuota(events, Date.now());
     quotaSuffix = q.used + '/' + q.limit + ' wk';
     renderBadge();
+  }
+
+  // --- Surviving an extension reload ---------------------------------------
+  // Updating or reloading the extension orphans the content script already
+  // running in an open tab: it keeps executing, but every chrome.* call throws
+  // "Extension context invalidated". Until now that killed the run silently —
+  // no sends, no log entries, an unchanged badge, and a popup that could not
+  // reach the tab. The only cure is reloading the page, so say exactly that.
+  function contextLost() {
+    return contextGone || !(chrome.runtime && chrome.runtime.id);
+  }
+
+  function giveUp(why) {
+    if (contextGone) return;
+    contextGone = true;
+    active = false;
+    if (intervalId) { clearInterval(intervalId); intervalId = null; }
+    badgeText = '⚠️ Reload this page';
+    badgeColor = '#c00';
+    quotaSuffix = '';
+    try { renderBadge(); } catch (e) { /* page torn down too */ }
+    console.log(LOG, 'Extension context is gone (' + why + ') — reload the page to continue');
+  }
+
+  function storageGet(keys, cb) {
+    if (contextLost()) { giveUp('get'); return; }
+    try {
+      chrome.storage.local.get(keys, (res) => {
+        if (chrome.runtime && chrome.runtime.lastError) { giveUp('get callback'); return; }
+        cb(res || {});
+      });
+    } catch (e) {
+      giveUp('get: ' + e.message);
+    }
+  }
+
+  function storageSet(obj) {
+    if (contextLost()) { giveUp('set'); return; }
+    try {
+      chrome.storage.local.set(obj);
+    } catch (e) {
+      giveUp('set: ' + e.message);
+    }
+  }
+
+  function storageRemove(key) {
+    if (contextLost()) { giveUp('remove'); return; }
+    try { chrome.storage.local.remove(key); } catch (e) { giveUp('remove: ' + e.message); }
   }
 
   // --- 🍻 Beer-emoji success marker: Material 3 Expressive motion ---------------
@@ -202,7 +255,7 @@
     if (!isUsableRecipe(recipe)) return;
     const isNew = !learnedRecipe || learnedRecipe.url !== recipe.url || learnedRecipe.body !== recipe.body;
     learnedRecipe = recipe;
-    chrome.storage.local.set({ lcRecipe: recipe });
+    storageSet({ lcRecipe: recipe });
     if (isNew) {
       console.log(LOG, 'Learned invite recipe from live request:', recipe.url);
       updateBadge('🧬 Recipe learned', '#6a1b9a');
@@ -260,7 +313,7 @@
       if (learned) {
         console.log(LOG, 'Learned recipe failed — discarding to re-learn');
         learnedRecipe = null;
-        chrome.storage.local.remove('lcRecipe');
+        storageRemove('lcRecipe');
       }
     }
     return 'error';
@@ -370,9 +423,9 @@
       pageUrl: location.href
     });
     const when = Date.parse(record.ts);
-    chrome.storage.local.get(['lcLog', 'lcEvents'], (res) => {
+    storageGet(['lcLog', 'lcEvents'], (res) => {
       const events = appendEvent(res.lcEvents, when);
-      chrome.storage.local.set({
+      storageSet({
         lcLog: appendRecord(res.lcLog, record, LOG_CAP),
         lcEvents: events
       });
@@ -383,6 +436,7 @@
 
   async function tick() {
     if (!active || pending) return;
+    if (contextLost()) { giveUp('tick'); return; }
 
     if (rateLimited) {
       updateBadge('❌ Rate-Limit! Waiting...', '#c00');
@@ -484,7 +538,7 @@
 
     if (ok) {
       count++;
-      chrome.storage.local.set({ lcCount: count });
+      storageSet({ lcCount: count });
       recordSuccess(cardInfo, profileId, method);
       console.log(LOG, 'Request #' + count + ' sent to', name);
       updateBadge('✅ #' + count + ' ' + name.substring(0, 20), '#2e7d32');
@@ -496,6 +550,7 @@
 
   function start() {
     if (intervalId) return;
+    if (contextLost()) { giveUp('start'); return; }
     active = true;
     pending = false;
     rateLimited = false;
@@ -521,21 +576,21 @@
       if (msg.enabled) start(); else stop();
       sendResponse({ ok: true });
     } else if (msg.action === 'getStatus') {
-      sendResponse({ active, count, healed: !!learnedRecipe });
+      sendResponse({ active, count, healed: !!learnedRecipe, contextGone });
     } else if (msg.action === 'resetCount') {
       count = 0;
-      chrome.storage.local.set({ lcCount: 0 });
+      storageSet({ lcCount: 0 });
       sendResponse({ ok: true });
     } else if (msg.action === 'reloadState') {
       // A restore rewrote storage under us — pull the new state into memory so
       // this tab doesn't keep running on the pre-restore counters.
-      chrome.storage.local.get(['lcCount', 'lcRecipe', 'lcLog', 'lcEvents'], applyStoredState);
+      storageGet(['lcCount', 'lcRecipe', 'lcLog', 'lcEvents'], applyStoredState);
       sendResponse({ ok: true });
     } else if (msg.action === 'clearLog') {
       // Also drop the in-memory guard, otherwise the popup would clear the log
       // while this tab silently keeps skipping the very people it just forgot.
       processedProfiles.clear();
-      chrome.storage.local.set({ lcLog: [] });
+      storageSet({ lcLog: [] });
       sendResponse({ ok: true });
     }
   });
@@ -556,15 +611,12 @@
     // empty series is a real state (log cleared) and must not be re-seeded.
     let events = result.lcEvents;
     if (events === undefined) {
-      events = [];
-      for (const r of result.lcLog || []) {
-        if (r && r.ts) events = appendEvent(events, r.ts);
-      }
-      chrome.storage.local.set({ lcEvents: events });
+      events = backfillEvents(result.lcLog);
+      storageSet({ lcEvents: events });
       if (events.length) console.log(LOG, 'Seeded quota history with', events.length, 'past requests');
     }
     setQuotaFromEvents(events);
   }
 
-  chrome.storage.local.get(['lcCount', 'lcRecipe', 'lcLog', 'lcEvents'], applyStoredState);
+  storageGet(['lcCount', 'lcRecipe', 'lcLog', 'lcEvents'], applyStoredState);
 })();

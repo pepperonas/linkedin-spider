@@ -11,6 +11,9 @@ function setupChrome() {
   listeners = [];
   globalThis.chrome = {
     runtime: {
+      // A live content script always has runtime.id; it goes undefined the
+      // moment the extension is reloaded, which is what the script watches for.
+      id: 'test-extension-id',
       lastError: null,
       onMessage: { addListener(fn) { listeners.push(fn); } }
     },

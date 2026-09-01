@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.9.0-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.9.1-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/manifest-v3-green?style=flat-square&logo=googlechrome&logoColor=white" alt="Manifest V3">
   <img src="https://img.shields.io/badge/world-MAIN_%2B_ISOLATED-8957e5?style=flat-square" alt="MAIN + ISOLATED world">
   <img src="https://img.shields.io/badge/platform-Chrome-yellow?style=flat-square&logo=googlechrome&logoColor=white" alt="Chrome">
@@ -37,7 +37,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/tests-263_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-283_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
   <img src="https://img.shields.io/badge/tested_with-Vitest-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest">
   <img src="https://img.shields.io/badge/DOM-jsdom-15a2bb?style=flat-square" alt="jsdom">
   <img src="https://img.shields.io/badge/build-no_build_step-brightgreen?style=flat-square" alt="No Build Step">
@@ -199,6 +199,7 @@ The bottom of the popup carries the **version number** (SemVer, read straight fr
 - "🕸️ ✅ #X Name · 43/200 wk" (dark green) — Successful request; the suffix is the weekly standing
 - "🕸️ ❌ Rate-Limit! 60s pause..." (red) — LinkedIn 429, waiting automatically
 - "🕸️ ❌ No CSRF Token!" (red) — API error
+- "🕸️ ⚠️ Reload this page" (red) — the extension was updated and this tab still runs the old content script. **Reload the page** and it continues
 
 ## Architecture
 
@@ -221,7 +222,7 @@ npm install
 npm test
 ```
 
-**263 unit and integration tests** with Vitest + jsdom (the timezone is pinned to `Europe/Berlin` in `vitest.config.js` — the quota and chart maths are calendar-local, and the bug naive millisecond arithmetic causes only exists where clocks actually shift):
+**283 unit and integration tests** with Vitest + jsdom (the timezone is pinned to `Europe/Berlin` in `vitest.config.js` — the quota and chart maths are calendar-local, and the bug naive millisecond arithmetic causes only exists where clocks actually shift):
 - `test/lib.test.js` — core functions, self-healing helpers (recipe building, invite detection), multilingual detection
 - `test/export.test.js` — name cleaning, card scraping, CSV generation (quoting, injection guard, BOM), file name, log cap
 - `test/content-log.test.js` — loads `content.js` for real and drives a full tick: a successful send lands in the log with its card data, duplicate guard holds
@@ -233,6 +234,7 @@ npm test
 - `test/popup-stats.test.js` — loads `popup.html` + `popup.js` for real: quota display, chart + period selection, HTML report, backup/restore round-trip, footer links
 - `test/report.test.js` — HTML report: self-containment (no script, no external reference), escaping of scraped names, quota/period figures, empty state
 - `test/styles.test.js` — contrast floors (4.5:1 / 3:1) for the popup **and** the report stylesheet, button-row layout contract, every id `popup.js` reaches for exists in the markup
+- `test/resilience.test.js` — behaviour after an extension reload (badge notice, timer torn down, `getStatus` reports it) + a runtime cap on the backfill
 - `test/version.test.js` — SemVer, parity between `manifest.json`, `package.json` and the README badge, footer contract
 - `test/release.test.js` — checks the release ZIP contains every file the manifest references
 
@@ -248,6 +250,34 @@ npx vitest run -t "buildInviteRequest"
 - **Release** — On push of a `v*` tag, tests are run and a GitHub Release with ZIP is created
 
 ## Changelog
+
+### 2.9.1 — No longer silent after an update
+
+After the extension is updated, an already-open LinkedIn tab keeps running the
+**old** content script — but its link to the extension is gone, so every
+`chrome.*` call throws `Extension context invalidated`. Until now the run died
+**silently**: no requests, no log entries, an unchanged badge, and a popup that
+could not reach the tab yet still showed "Paused". Reloading the page is the
+only cure, so that is what it says now.
+
+- **Page badge**: `⚠️ Reload this page` (red) instead of a frozen state. The
+  notice is no longer painted over — a later success message would cover the one
+  line explaining why nothing is being recorded any more
+- The scan timer is torn down instead of firing into the void
+- `getStatus` reports `contextGone` so the popup knows
+- **Popup**: the status line says `⚠️ Reload the LinkedIn tab` (measured 6.26:1),
+  backs its polling off from 1 s to 5 s rather than hammering a silent tab, and
+  recovers by itself once the tab answers again. Quota, chart and every export
+  keep working throughout — they come from storage, not from the tab
+- The toggle no longer implies it started something nobody received
+- **Backfill de-quadratified**: the one-off import of history from the contact
+  log re-sorted the series on **every** record — measured 619 ms for 5000
+  entries, growing as n², synchronously on every page load. Now one pass and one
+  sort, with a test capping the runtime
+- Suite 263 → 283 tests; 13 new mutation probes, all caught. Two survived at
+  first and revealed that the assertions held with or without the fix — since
+  tightened. One of those found a real bug in the fix itself: the success
+  message was overwriting the warning
 
 ### 2.9.0 — Quota, activity, backup
 

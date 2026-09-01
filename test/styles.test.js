@@ -73,6 +73,21 @@ describe('contrast inside the exported report', () => {
   });
 });
 
+describe('the unreachable-tab warning', () => {
+  // It sits on its own tinted ground, so it has to be measured against that,
+  // not against the page white.
+  it('is legible on its own background', () => {
+    const fg = colorOf(css, '.status.warn');
+    const block = css.match(/\.status\.warn\s*\{([^}]*)\}/)[1];
+    const bg = block.match(/background:\s*(#[0-9a-fA-F]{3,6})/)[1];
+    expect(contrast(fg, bg)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('does not reuse the "everything is fine" green', () => {
+    expect(colorOf(css, '.status.warn')).not.toBe(colorOf(css, '.status.active'));
+  });
+});
+
 describe('popup layout contract', () => {
   it('keeps the report, backup and restore buttons on one row', () => {
     const row = popupHtml.match(/<div class="btn-row">([\s\S]*?)<\/div>/)[1];

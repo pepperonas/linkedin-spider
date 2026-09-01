@@ -580,6 +580,24 @@
     return list.length > cap ? list.slice(list.length - cap) : list;
   }
 
+  // One pass over the contact log, then ONE sort. Appending record by record
+  // re-sorted the whole series each time — 619 ms for a 5000-entry log, growing
+  // as n², and it runs synchronously on every LinkedIn page load.
+  function backfillEvents(log, opts) {
+    const o = opts || {};
+    const now = Number.isFinite(toMs(o.now)) ? toMs(o.now) : Date.now();
+    const maxAge = typeof o.maxAgeDays === 'number' ? o.maxAgeDays : EVENT_MAX_AGE_DAYS;
+    const cap = typeof o.cap === 'number' && o.cap > 0 ? o.cap : EVENT_CAP;
+    const cutoff = now - maxAge * DAY_MS;
+    const out = [];
+    for (const r of Array.isArray(log) ? log : []) {
+      const ms = toMs(r && r.ts);
+      if (Number.isFinite(ms) && ms >= cutoff) out.push(ms);
+    }
+    out.sort((a, b) => a - b);
+    return out.length > cap ? out.slice(out.length - cap) : out;
+  }
+
   // --- Local calendar arithmetic (never ms maths — DST would drift) ---------
   function startOfDay(value) {
     const d = new Date(toMs(value));
@@ -961,6 +979,7 @@
     toMs,
     normalizeEvents,
     appendEvent,
+    backfillEvents,
     startOfDay,
     startOfWeek,
     isoWeek,
