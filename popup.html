@@ -18,28 +18,65 @@
 
     <div class="status" id="status">Paused</div>
 
-    <div class="counter-row">
-      <span class="counter-label">Requests sent</span>
-      <span class="counter-value" id="counter">0</span>
-    </div>
+    <section class="panel" id="quota-panel">
+      <div class="panel-head">
+        <span class="panel-title">Weekly quota</span>
+        <span class="panel-value"><b id="quota-used">0</b> / <span id="quota-limit">200</span></span>
+      </div>
+      <div class="track"><div class="fill" id="quota-fill"></div></div>
+      <div class="sub" id="quota-sub"></div>
+    </section>
 
-    <div class="counter-row">
-      <span class="counter-label">Saved contacts</span>
-      <span class="counter-value" id="logged">0</span>
-    </div>
+    <section class="panel">
+      <div class="panel-head">
+        <span class="panel-title">Requests over time</span>
+        <span class="sub" id="range-total"></span>
+      </div>
+      <div class="chips" id="ranges"></div>
+      <div class="chart" id="chart"></div>
+    </section>
 
-    <div class="counter-row">
-      <span class="counter-label">API mode</span>
-      <span class="counter-value" id="healed">default</span>
+    <div class="stats">
+      <div class="stat">
+        <span class="stat-value" id="counter">0</span>
+        <span class="stat-label">Requests sent</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="logged">0</span>
+        <span class="stat-label">Saved contacts</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value stat-value-sm" id="healed">default</span>
+        <span class="stat-label">API mode</span>
+      </div>
     </div>
 
     <button id="export" class="primary-btn" disabled>⬇ Export contacts as CSV</button>
+
+    <div class="btn-row">
+      <button id="report" class="secondary-btn" disabled title="Export an HTML report with the activity chart">📊 Report</button>
+      <button id="backup" class="reset-btn" title="Save all stored values as JSON">💾 Backup</button>
+      <button id="restore" class="reset-btn" title="Restore all values from a backup file">↺ Restore</button>
+    </div>
+    <input type="file" id="restoreFile" accept="application/json,.json" hidden>
+
     <p class="hint" id="hint"></p>
 
     <div class="btn-row">
       <button id="reset" class="reset-btn">Reset Counter</button>
       <button id="clearLog" class="reset-btn danger" disabled>Clear Log</button>
     </div>
+
+    <footer class="footer">
+      <div class="footer-version" id="version"></div>
+      <div class="footer-links">
+        <a id="link-celox" href="https://celox.io" target="_blank" rel="noopener noreferrer">celox.io</a>
+        <span class="dot">·</span>
+        <a id="link-review" href="https://g.page/r/CXgdRV3QysvxEBM/review" target="_blank" rel="noopener noreferrer">★ Rate</a>
+        <span class="dot">·</span>
+        <a id="link-donate" href="https://www.paypal.com/donate/?business=martin.pfeffer@celox.io&amp;currency_code=EUR&amp;item_name=LinkedIn%20Spider" target="_blank" rel="noopener noreferrer" title="PayPal donation to martin.pfeffer@celox.io">♥ Donate</a>
+      </div>
+    </footer>
   </div>
   <script src="lib.js"></script>
   <script src="popup.js"></script>

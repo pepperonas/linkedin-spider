@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.7.4-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.9.0-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/manifest-v3-green?style=flat-square&logo=googlechrome&logoColor=white" alt="Manifest V3">
   <img src="https://img.shields.io/badge/world-MAIN_%2B_ISOLATED-8957e5?style=flat-square" alt="MAIN + ISOLATED world">
   <img src="https://img.shields.io/badge/platform-Chrome-yellow?style=flat-square&logo=googlechrome&logoColor=white" alt="Chrome">
@@ -37,7 +37,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/tests-67_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-263_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
   <img src="https://img.shields.io/badge/tested_with-Vitest-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest">
   <img src="https://img.shields.io/badge/DOM-jsdom-15a2bb?style=flat-square" alt="jsdom">
   <img src="https://img.shields.io/badge/build-no_build_step-brightgreen?style=flat-square" alt="No Build Step">
@@ -86,8 +86,13 @@ LinkedIn constantly changes its frontend (CSS classes, DOM structure) and its in
 - Request counter (persistent in `chrome.storage`)
 - API mode indicator in the popup (`default` / `self-healed ✓`)
 - Reset counter
+- 📊 **Weekly quota in the popup** — 200 free connection requests per week, used/remaining with a progress bar (plus the rolling 7-day figure); also shown on the in-page badge
+- 📈 **Activity chart** with a selectable period (7 d / 30 d / 90 d / 1 year) — in the popup and in the HTML report
+- 💾 **Backup & restore** — export and re-import every stored value as JSON
 - 📇 **Contact log** — every sent request is stored permanently (name, date, profile URL, headline, company, location, connection degree, profile ID, send path, search page)
 - ⬇ **CSV export** from the popup — spreadsheet-ready (semicolon + UTF-8 BOM), file name with a date stamp pre-filled in the save dialog
+- 📊 **HTML report export** — a self-contained file with the chart, the quota and the contact table, no external assets
+- 🔖 **Version number + links in the popup footer** (SemVer)
 - 🔁 **Cross-session duplicate guard** — anyone in the log is never asked again
 - Visual status badge (bottom right on page)
 - Successful connections are marked with a 🍻 emoji — with a Material 3 Expressive physics animation (gravity drop, impact squash & decaying bounces) and a custom tooltip on hover
@@ -128,6 +133,29 @@ git clone https://github.com/pepperonas/linkedin-spider.git
 3. Switch the toggle to ON
 4. The badge in the bottom right shows progress in real time
 
+**Weekly quota:**
+
+LinkedIn allows **200 connection requests per week** for free. The top of the popup shows how many of those the current week has used, how many are left and when the allowance resets. The bar turns amber past 80 % and red once nothing is left.
+
+- **Week = calendar week, starting Monday 00:00 local time.** Next to it sits the **rolling 7-day count** — LinkedIn throttles on a sliding window, so a Sunday-plus-Monday burst can trip it while the calendar week still looks harmless.
+- The count comes from a separate list of timestamps (`lcEvents`), **not** from the contact log: that one is deduplicated, capped and user-clearable, so it would under-report. `Clear Log` therefore wipes the contacts, **not** the quota history.
+- The in-page badge carries the figure permanently (`🕸️ ✅ #12 Name · 43/200 wk`) so the quota is visible exactly while requests are going out.
+- On the first run after the update the history is seeded once from the timestamps already in the contact log.
+- The extension does **not** stop itself at 200 — the display informs, the decision stays with the user.
+
+**Activity:**
+
+Below the quota sits a bar chart of the requests sent. The period is picked with chips and is remembered (`chrome.storage`):
+
+| Period | Resolution | Columns |
+|--------|------------|---------|
+| 7 d | day | 7 |
+| 30 d | day | 30 |
+| 90 d | week (Mon–Sun) | 13 |
+| 1 y | month | 12 |
+
+The running column is drawn lighter and marked "in progress" in its tooltip — otherwise the unfinished day reads as a slump. The chart is hand-written inline SVG: a Chrome popup runs under `script-src 'self'`, so a CDN chart library cannot load at all — and a bundled one would be the extension's only runtime dependency.
+
 **Exporting contacts:**
 
 Every successful request lands in the log (`Saved contacts` in the popup). **⬇ Export contacts as CSV** opens the save dialog with a suggested name like `linkedin-spider-anfragen-2026-08-30_1432.csv`.
@@ -147,12 +175,28 @@ Every successful request lands in the log (`Saved contacts` in the popup). **⬇
 
 Card fields are best-effort: if LinkedIn changes its DOM, the affected column stays empty — sending is unaffected. The export reads `chrome.storage` directly, so it also works when the popup is opened over a non-LinkedIn tab. **Clear Log** wipes the log (two clicks) and thereby lifts the duplicate guard.
 
+**Exporting a report (with the chart):**
+
+**📊 Report** writes a self-contained HTML file (`linkedin-spider-report-2026-09-01_1432.html`): the weekly quota, the chart for the **currently selected** period and the full contact table. Everything is inline — no script, no CDN, no external font; the file opens offline from disk.
+
+**Backup & restore:**
+
+- **💾 Backup** writes every stored value as JSON (`linkedin-spider-backup-2026-09-01_1432.json`): contact log, quota history, counter, selected period and the learned API recipe.
+- **↺ Restore** reads such a file back, in two steps: pick the file, then a second click confirms the overwrite.
+- **The import is strict.** Foreign or damaged files are rejected **whole** (plain-language error in the popup) and nothing is written. App marker, type and schema version are checked; a newer schema is rejected rather than half-read. Unknown fields in contact records are dropped, broken counters/timestamps/periods are coerced to valid values.
+- **Security:** session headers (`csrf-token`, `cookie`, `authorization`) are **stripped** from the recipe before it reaches the file — a backup you pass on carries no session token. Nothing is lost functionally: a fresh CSRF token is injected on every send anyway.
+- **A restore never starts sending.** `Auto-Connect` is always OFF afterwards, whatever the file said.
+
+**Popup footer:**
+
+The bottom of the popup carries the **version number** (SemVer, read straight from `manifest.json` — never hard-coded) plus links to [celox.io](https://celox.io), the [Google Maps review page](https://g.page/r/CXgdRV3QysvxEBM/review) and a PayPal donation to `martin.pfeffer@celox.io`.
+
 **Status Badge:**
 - "🕸️ ready" (grey) — Extension loaded, inactive
 - "🕸️ Active (X sent)" (green) — Running, X requests sent
 - "🕸️ ⏳ Name..." (LinkedIn blue) — Request being sent
 - "🕸️ 🧬 Recipe learned" (purple) — API request successfully learned (self-healing)
-- "🕸️ ✅ #X Name" (dark green) — Successful request
+- "🕸️ ✅ #X Name · 43/200 wk" (dark green) — Successful request; the suffix is the weekly standing
 - "🕸️ ❌ Rate-Limit! 60s pause..." (red) — LinkedIn 429, waiting automatically
 - "🕸️ ❌ No CSRF Token!" (red) — API error
 
@@ -163,9 +207,9 @@ Two content-script worlds plus the popup:
 | File | World | Role |
 |------|-------|------|
 | `interceptor.js` | **MAIN** (`document_start`) | Patches `fetch`/`XMLHttpRequest`, captures LinkedIn's invite request, posts the "recipe" via `postMessage` |
-| `lib.js` | ISOLATED | Pure, testable core functions: selectors, recipe building, invite detection |
-| `content.js` | ISOLATED | Orchestration: DOM scan, recipe-driven API calls, click fallback, recipe learning, badge |
-| `popup.html` / `popup.js` | — | Popup UI: toggle, counter, API mode, contact log + CSV export (loads `lib.js` too) |
+| `lib.js` | ISOLATED | Pure, testable core functions: selectors, recipe building, invite detection, quota/chart maths, SVG chart, backup format |
+| `content.js` | ISOLATED | Orchestration: DOM scan, recipe-driven API calls, click fallback, recipe learning, badge, quota history |
+| `popup.html` / `popup.js` | — | Popup UI: toggle, quota, chart, counter, API mode, CSV/HTML/backup export, restore, footer (loads `lib.js` too) |
 | `styles.css` | — | Popup styling |
 | `manifest.json` | — | Chrome Extension Manifest V3 |
 | `icon.png` | — | Extension icon |
@@ -177,13 +221,19 @@ npm install
 npm test
 ```
 
-**136 unit and integration tests** with Vitest + jsdom:
+**263 unit and integration tests** with Vitest + jsdom (the timezone is pinned to `Europe/Berlin` in `vitest.config.js` — the quota and chart maths are calendar-local, and the bug naive millisecond arithmetic causes only exists where clocks actually shift):
 - `test/lib.test.js` — core functions, self-healing helpers (recipe building, invite detection), multilingual detection
 - `test/export.test.js` — name cleaning, card scraping, CSV generation (quoting, injection guard, BOM), file name, log cap
 - `test/content-log.test.js` — loads `content.js` for real and drives a full tick: a successful send lands in the log with its card data, duplicate guard holds
 - `test/popup-export.test.js` — loads `popup.html` + `popup.js` for real: export download, cancel behaviour, two-step clear
 - `test/content.test.js` — integration tests for message handling and DOM interaction
 - `test/popup.test.js` — popup UI and Chrome API tests
+- `test/stats.test.js` — quota maths (calendar week, rolling 7 days, clamping), bucketing per period, SVG chart (scaling, running column, escaping, empty state)
+- `test/backup.test.js` — backup format, secret stripping, strict import validation (foreign/damaged/too-new files)
+- `test/popup-stats.test.js` — loads `popup.html` + `popup.js` for real: quota display, chart + period selection, HTML report, backup/restore round-trip, footer links
+- `test/report.test.js` — HTML report: self-containment (no script, no external reference), escaping of scraped names, quota/period figures, empty state
+- `test/styles.test.js` — contrast floors (4.5:1 / 3:1) for the popup **and** the report stylesheet, button-row layout contract, every id `popup.js` reaches for exists in the markup
+- `test/version.test.js` — SemVer, parity between `manifest.json`, `package.json` and the README badge, footer contract
 - `test/release.test.js` — checks the release ZIP contains every file the manifest references
 
 Single file / single test:
@@ -198,6 +248,20 @@ npx vitest run -t "buildInviteRequest"
 - **Release** — On push of a `v*` tag, tests are run and a GitHub Release with ZIP is created
 
 ## Changelog
+
+### 2.9.0 — Quota, activity, backup
+
+- **Weekly quota in the popup**: 200 free requests per week, used + remaining with a progress bar, reset date, warning colour past 80 % and at 0. Plus the **rolling 7-day count**, because LinkedIn throttles on a sliding window
+- The figure also rides on the **in-page badge** — visible exactly while requests are going out
+- Counting uses **its own timestamp series** rather than the contact log (that one is deduplicated, capped and clearable, so it would under-report); on the first run after the update it is seeded once from the existing log
+- **Activity chart** with a selectable period (7 d / 30 d / 90 d / 1 year), the choice is remembered; hand-written inline SVG with no dependency (a popup runs under `script-src 'self'`). The running column is marked "in progress". It is only redrawn on a real change — the one-second poll would otherwise tear off live tooltips
+- **HTML report export**: a self-contained file with the chart, the quota and the contact table, fully inline
+- **Backup & restore** of every stored value as JSON. The import is strict (app marker, type, schema; foreign/damaged files are rejected whole without writing anything), session headers are stripped from the recipe before writing, and a restore always leaves `Auto-Connect` OFF
+- **SemVer + footer** in the popup: version from the manifest, links to celox.io, the Google Maps review page and a PayPal donation
+- `manifest.json` and `package.json` now carry the same version — a test pins it (they had drifted apart across five releases)
+- **Popup compacted**: Chrome caps popups at 600px tall and the new blocks pushed the footer below that. The three figures now sit side by side and Report/Backup/Restore share a row (measured 596px)
+- **Contrast fixed**: the muted tone introduced here measured 3.19:1, below the 4.5:1 floor; every text role now measures 5.0–5.7:1. A test pins the floor — for the popup **and** for the report stylesheet
+- Test suite from 136 to 263 tests, every new assertion mutation-probed
 
 ### 2.8.0 — Contact log & CSV export
 

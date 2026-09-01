@@ -520,6 +520,411 @@
     return set;
   }
 
+  // --- Weekly quota, activity chart, backup ---------------------------------
+  // LinkedIn hands out a free allowance of connection requests per week. The
+  // quota is counted from `lcEvents` — a bare list of send timestamps — and NOT
+  // from the contact log: that one is deduplicated, capped and user-clearable,
+  // so it would under-report what LinkedIn actually saw.
+  const WEEKLY_QUOTA = 200;
+  const EVENT_MAX_AGE_DAYS = 400; // keeps the 1-year chart complete, bounds storage
+  const EVENT_CAP = 20000;
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
+
+  // Selectable chart periods. `count` is explicit rather than derived from
+  // `days` — 90 days is 13 week columns, a year is 12 month columns.
+  const CHART_RANGES = [
+    { key: '7d', label: '7 d', days: 7, bucket: 'day', count: 7 },
+    { key: '30d', label: '30 d', days: 30, bucket: 'day', count: 30 },
+    { key: '90d', label: '90 d', days: 90, bucket: 'week', count: 13 },
+    { key: '1y', label: '1 y', days: 365, bucket: 'month', count: 12 }
+  ];
+
+  function rangeByKey(key) {
+    return CHART_RANGES.find((r) => r.key === key) || CHART_RANGES[0];
+  }
+
+  // Epoch ms from a number, an ISO string or a Date; NaN for anything else.
+  function toMs(value) {
+    if (value instanceof Date) return value.getTime();
+    if (typeof value === 'number') return Number.isFinite(value) ? value : NaN;
+    if (typeof value === 'string') return Date.parse(value);
+    return NaN;
+  }
+
+  function normalizeEvents(list) {
+    const out = [];
+    for (const v of Array.isArray(list) ? list : []) {
+      const ms = toMs(v);
+      if (Number.isFinite(ms)) out.push(ms);
+    }
+    return out.sort((a, b) => a - b);
+  }
+
+  // Append without mutating; prune by age first, then by hard cap.
+  function appendEvent(events, when, opts) {
+    const o = opts || {};
+    const now = Number.isFinite(toMs(o.now)) ? toMs(o.now) : Date.now();
+    const maxAge = typeof o.maxAgeDays === 'number' ? o.maxAgeDays : EVENT_MAX_AGE_DAYS;
+    const cap = typeof o.cap === 'number' && o.cap > 0 ? o.cap : EVENT_CAP;
+    const ms = Number.isFinite(toMs(when)) ? toMs(when) : now;
+    const cutoff = now - maxAge * DAY_MS;
+    const list = normalizeEvents(events).filter((t) => t >= cutoff);
+    list.push(ms);
+    // Keep the series sorted: the cap below drops from the front, so an
+    // out-of-order write would otherwise evict the wrong (newer) entry.
+    list.sort((a, b) => a - b);
+    return list.length > cap ? list.slice(list.length - cap) : list;
+  }
+
+  // --- Local calendar arithmetic (never ms maths — DST would drift) ---------
+  function startOfDay(value) {
+    const d = new Date(toMs(value));
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  }
+
+  function addDays(value, n) {
+    const d = new Date(toMs(value));
+    d.setDate(d.getDate() + n);
+    return d.getTime();
+  }
+
+  function startOfMonth(value) {
+    const d = new Date(toMs(value));
+    d.setDate(1);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  }
+
+  function addMonths(value, n) {
+    const d = new Date(toMs(value));
+    d.setMonth(d.getMonth() + n);
+    return d.getTime();
+  }
+
+  // Monday 00:00 local — the German/ISO week, matching the rest of the suite.
+  function startOfWeek(value) {
+    const d = new Date(toMs(value));
+    d.setHours(0, 0, 0, 0);
+    const dow = d.getDay();               // 0 = Sunday
+    d.setDate(d.getDate() - ((dow + 6) % 7));
+    return d.getTime();
+  }
+
+  function isoWeek(value) {
+    const d = new Date(toMs(value));
+    d.setHours(0, 0, 0, 0);
+    // Shift onto the Thursday of this ISO week, then count weeks from Jan 4th.
+    d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
+    const firstThursday = new Date(d.getFullYear(), 0, 4);
+    firstThursday.setDate(firstThursday.getDate() + 3 - ((firstThursday.getDay() + 6) % 7));
+    return 1 + Math.round((d - firstThursday) / (7 * DAY_MS));
+  }
+
+  function pad2(n) { return String(n).padStart(2, '0'); }
+
+  function formatDay(ms) {
+    const d = new Date(ms);
+    return pad2(d.getDate()) + '.' + pad2(d.getMonth() + 1) + '.' + d.getFullYear();
+  }
+
+  // Where the current week stands against the free allowance. `rolling7` is the
+  // last 168 h — LinkedIn throttles on a rolling window, so a Sunday-plus-Monday
+  // burst can trip it while the calendar week still looks harmless.
+  function weekQuota(events, now, limit) {
+    const nowMs = Number.isFinite(toMs(now)) ? toMs(now) : Date.now();
+    const max = typeof limit === 'number' && limit > 0 ? limit : WEEKLY_QUOTA;
+    const list = normalizeEvents(events);
+    const weekStart = startOfWeek(nowMs);
+    const rollingStart = nowMs - 7 * DAY_MS;
+    let used = 0;
+    let rolling7 = 0;
+    for (const t of list) {
+      if (t >= weekStart) used++;
+      if (t >= rollingStart) rolling7++;
+    }
+    return {
+      used,
+      limit: max,
+      remaining: Math.max(0, max - used),
+      percent: Math.min(100, Math.round((used / max) * 100)),
+      weekStart,
+      resetsAt: addDays(weekStart, 7),
+      rolling7
+    };
+  }
+
+  // Chronological columns for the selected period, oldest first, no gaps.
+  function bucketEvents(events, rangeKey, now) {
+    const range = rangeByKey(rangeKey);
+    const nowMs = Number.isFinite(toMs(now)) ? toMs(now) : Date.now();
+    const list = normalizeEvents(events);
+
+    const starts = [];
+    for (let i = range.count - 1; i >= 0; i--) {
+      if (range.bucket === 'day') starts.push(addDays(startOfDay(nowMs), -i));
+      else if (range.bucket === 'week') starts.push(addDays(startOfWeek(nowMs), -7 * i));
+      else starts.push(addMonths(startOfMonth(nowMs), -i));
+    }
+    const afterLast = range.bucket === 'day' ? addDays(starts[starts.length - 1], 1)
+      : range.bucket === 'week' ? addDays(starts[starts.length - 1], 7)
+        : addMonths(starts[starts.length - 1], 1);
+
+    const buckets = starts.map((start, i) => {
+      const end = i + 1 < starts.length ? starts[i + 1] : afterLast;
+      const d = new Date(start);
+      let label, title;
+      if (range.bucket === 'day') {
+        label = d.getDate() + '.' + (d.getMonth() + 1) + '.';
+        title = formatDay(start);
+      } else if (range.bucket === 'week') {
+        label = 'W' + isoWeek(start);
+        title = 'Week ' + isoWeek(start) + ' · from ' + formatDay(start);
+      } else {
+        label = MONTHS_SHORT[d.getMonth()];
+        title = MONTHS_LONG[d.getMonth()] + ' ' + d.getFullYear();
+      }
+      return { start, end, label, title, count: 0, current: i === starts.length - 1 };
+    });
+
+    for (const t of list) {
+      if (t < buckets[0].start || t >= afterLast) continue;
+      for (let i = buckets.length - 1; i >= 0; i--) {
+        if (t >= buckets[i].start) { buckets[i].count++; break; }
+      }
+    }
+    return buckets;
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function round2(n) { return Math.round(n * 100) / 100; }
+
+  // Hand-rolled inline SVG: a Chrome popup runs under script-src 'self', so a
+  // CDN chart library is not loadable — and a bundled one would be the only
+  // runtime dependency in the whole extension.
+  function chartSvg(buckets, opts) {
+    const o = opts || {};
+    const width = o.width || 300;
+    const height = o.height || 96;
+    const list = Array.isArray(buckets) ? buckets : [];
+    const head = '<svg class="lc-chart" viewBox="0 0 ' + width + ' ' + height +
+      '" width="100%" height="' + height + '" role="img" aria-label="Requests over time" xmlns="http://www.w3.org/2000/svg">';
+    const peak = list.reduce((m, b) => Math.max(m, b.count || 0), 0);
+
+    if (!list.length || peak === 0) {
+      return head + '<text class="lc-empty" x="' + (width / 2) + '" y="' + (height / 2) +
+        '" text-anchor="middle" dominant-baseline="middle">No requests in this period</text></svg>';
+    }
+
+    const padL = 24, padR = 4, padT = 10, padB = 14;
+    const plotW = width - padL - padR;
+    const plotH = height - padT - padB;
+    const base = padT + plotH;
+    const slot = plotW / list.length;
+    const barW = Math.max(2, round2(slot * 0.68));
+
+    let out = head;
+    out += '<line class="lc-axis" x1="' + padL + '" y1="' + base + '" x2="' + (padL + plotW) + '" y2="' + base + '"></line>';
+    out += '<text class="lc-ax" x="' + (padL - 4) + '" y="' + (padT + 4) + '" text-anchor="end">' + peak + '</text>';
+    out += '<text class="lc-ax" x="' + (padL - 4) + '" y="' + base + '" text-anchor="end">0</text>';
+
+    list.forEach((b, i) => {
+      const h = round2(((b.count || 0) / peak) * plotH);
+      const x = round2(padL + i * slot + (slot - barW) / 2);
+      const cls = 'lc-bar' + (b.current ? ' lc-bar-current' : '');
+      out += '<rect class="' + cls + '" x="' + x + '" y="' + round2(base - h) +
+        '" width="' + barW + '" height="' + h + '" rx="2"></rect>';
+    });
+
+    // Transparent full-height hit areas on top, so a zero-count column still
+    // has a hover target and the tooltip is never swallowed by the bar.
+    list.forEach((b, i) => {
+      const x = round2(padL + i * slot);
+      out += '<rect class="lc-hit" x="' + x + '" y="' + padT + '" width="' + round2(slot) +
+        '" height="' + plotH + '"><title>' + escapeHtml(b.title) + ': ' +
+        (b.count || 0) + (b.current ? ' (in progress)' : '') + '</title></rect>';
+    });
+
+    const step = Math.ceil(list.length / 6);
+    list.forEach((b, i) => {
+      if ((list.length - 1 - i) % step !== 0) return;
+      const x = round2(padL + i * slot + slot / 2);
+      out += '<text class="lc-tick" x="' + x + '" y="' + (height - 3) + '" text-anchor="middle">' +
+        escapeHtml(b.label) + '</text>';
+    });
+
+    return out + '</svg>';
+  }
+
+  // --- Backup / restore -----------------------------------------------------
+  const BACKUP_APP = 'linkedin-spider';
+  const BACKUP_SCHEMA = 1;
+  const BACKUP_KEYS = ['lcEnabled', 'lcCount', 'lcLog', 'lcEvents', 'lcRecipe', 'lcRange'];
+  const RECORD_FIELDS = ['ts', 'name', 'profileUrl', 'headline', 'company', 'location',
+    'degree', 'profileId', 'method', 'pageUrl'];
+  // Headers that carry a live session. The recipe works without them (a fresh
+  // CSRF token is injected on every send), so a backup file must not leak one.
+  const SECRET_HEADERS = ['csrf-token', 'cookie', 'authorization', 'x-li-identity'];
+
+  function sanitizeRecipeForBackup(recipe) {
+    if (!isUsableRecipe(recipe)) return null;
+    const headers = {};
+    for (const [k, v] of Object.entries(recipe.headers || {})) {
+      if (SECRET_HEADERS.includes(String(k).toLowerCase())) continue;
+      headers[k] = String(v);
+    }
+    const out = { url: recipe.url, method: recipe.method || 'POST', headers };
+    if (recipe.bodyTemplate) out.bodyTemplate = recipe.bodyTemplate;
+    if (recipe.body) out.body = recipe.body;
+    return out;
+  }
+
+  function buildBackup(state, meta) {
+    const s = state || {};
+    const m = meta || {};
+    const now = (m.now instanceof Date && !isNaN(m.now.getTime())) ? m.now : new Date();
+    return {
+      app: BACKUP_APP,
+      type: 'backup',
+      schema: BACKUP_SCHEMA,
+      version: m.version || '',
+      exportedAt: now.toISOString(),
+      data: {
+        lcEnabled: !!s.lcEnabled,
+        lcCount: Math.max(0, Math.floor(Number(s.lcCount) || 0)),
+        lcLog: Array.isArray(s.lcLog) ? s.lcLog : [],
+        lcEvents: normalizeEvents(s.lcEvents),
+        lcRecipe: sanitizeRecipeForBackup(s.lcRecipe),
+        lcRange: rangeByKey(s.lcRange).key
+      }
+    };
+  }
+
+  function sanitizeRecord(raw) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    const out = {};
+    for (const f of RECORD_FIELDS) out[f] = normalizeSpace(raw[f]);
+    return out;
+  }
+
+  // Strict on purpose: a foreign or damaged file is rejected whole, so a bad
+  // import can never half-overwrite a good log.
+  function parseBackup(text) {
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch (e) {
+      return { ok: false, error: 'This file is not a valid JSON file.' };
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
+        parsed.app !== BACKUP_APP || parsed.type !== 'backup') {
+      return { ok: false, error: 'This file is not a LinkedIn Spider backup.' };
+    }
+    const schema = Number(parsed.schema);
+    if (!Number.isFinite(schema) || schema < 1) {
+      return { ok: false, error: 'This backup has no readable schema version.' };
+    }
+    if (schema > BACKUP_SCHEMA) {
+      return { ok: false, error: 'This backup was written by a newer version of LinkedIn Spider.' };
+    }
+    const d = parsed.data;
+    if (!d || typeof d !== 'object' || Array.isArray(d)) {
+      return { ok: false, error: 'This backup contains no data.' };
+    }
+
+    const lcLog = (Array.isArray(d.lcLog) ? d.lcLog : []).map(sanitizeRecord).filter(Boolean);
+    const data = {
+      // Never resume sending off the back of a restore — the user has to arm it.
+      lcEnabled: false,
+      lcCount: Math.max(0, Math.floor(Number(d.lcCount) || 0)),
+      lcLog,
+      lcEvents: normalizeEvents(d.lcEvents),
+      lcRecipe: isUsableRecipe(d.lcRecipe) ? d.lcRecipe : null,
+      lcRange: rangeByKey(d.lcRange).key
+    };
+    return {
+      ok: true,
+      data,
+      version: typeof parsed.version === 'string' ? parsed.version : '',
+      exportedAt: typeof parsed.exportedAt === 'string' ? parsed.exportedAt : '',
+      stats: { contacts: data.lcLog.length, events: data.lcEvents.length }
+    };
+  }
+
+  function stampedName(prefix, ext, date) {
+    const d = (date instanceof Date && !isNaN(date.getTime())) ? date : new Date();
+    return prefix + '-' + d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) +
+      '_' + pad2(d.getHours()) + pad2(d.getMinutes()) + '.' + ext;
+  }
+
+  function backupFilename(date) { return stampedName('linkedin-spider-backup', 'json', date); }
+  function reportFilename(date) { return stampedName('linkedin-spider-report', 'html', date); }
+
+  function jsonDataUrl(value) {
+    return 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(value, null, 2));
+  }
+
+  function htmlDataUrl(html) {
+    return 'data:text/html;charset=utf-8,' + encodeURIComponent(html);
+  }
+
+  // Self-contained HTML report: the same chart the popup draws, plus the quota
+  // and the contact table. No external assets — it has to open from disk.
+  function reportHtml(opts) {
+    const o = opts || {};
+    const q = o.quota || weekQuota([], Date.now());
+    const buckets = Array.isArray(o.buckets) ? o.buckets : [];
+    const records = Array.isArray(o.records) ? o.records : [];
+    const total = buckets.reduce((a, b) => a + (b.count || 0), 0);
+    const generated = (o.generatedAt instanceof Date) ? o.generatedAt : new Date();
+
+    const rows = records.map((r) => '<tr>' + CSV_COLUMNS
+      .map((c) => '<td>' + escapeHtml(c[1](r || {})) + '</td>').join('') + '</tr>').join('\n');
+
+    return '<!doctype html>\n<html lang="en"><head><meta charset="utf-8">' +
+      '<title>LinkedIn Spider report</title><style>' +
+      'body{font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;margin:32px;color:#1d2226;background:#fff}' +
+      'h1{font-size:20px;color:#0a66c2;margin:0 0 4px}.meta{color:#666;font-size:12px;margin-bottom:24px}' +
+      'section{margin-bottom:28px}h2{font-size:14px;text-transform:uppercase;letter-spacing:.5px;color:#666;margin:0 0 8px}' +
+      '.big{font-size:26px;font-weight:700;color:#0a66c2}.sub{color:#666;font-size:12px}' +
+      '.track{height:8px;border-radius:4px;background:#e6e9ec;overflow:hidden;max-width:640px;margin:8px 0}' +
+      '.fill{height:100%;background:#0a66c2}' +
+      'svg{max-width:680px;border:1px solid #e6e9ec;border-radius:6px;background:#fafbfc}' +
+      '.lc-bar{fill:#0a66c2}.lc-bar-current{fill:#7fb0e3}.lc-hit{fill:#000;opacity:0}' +
+      '.lc-axis{stroke:#d0d5da;stroke-width:1}.lc-ax,.lc-tick{fill:#6a7078;font-size:9px}' +
+      '.lc-empty{fill:#6a7078;font-size:11px}' +
+      'table{border-collapse:collapse;width:100%;font-size:12px}' +
+      'th,td{border-bottom:1px solid #e6e9ec;padding:6px 8px;text-align:left;vertical-align:top}' +
+      'th{background:#f3f6f8;font-weight:600}footer{margin-top:32px;color:#6a7078;font-size:11px}' +
+      'footer a{color:#0a66c2}</style></head><body>' +
+      '<h1>LinkedIn Spider — activity report</h1>' +
+      '<div class="meta">Generated ' + escapeHtml(formatTimestamp(generated.toISOString())) +
+      ' · version ' + escapeHtml(o.version || '') + '</div>' +
+      '<section><h2>Weekly quota</h2><div class="big">' + q.used + ' / ' + q.limit + '</div>' +
+      '<div class="track"><div class="fill" style="width:' + q.percent + '%"></div></div>' +
+      '<div class="sub">' + q.remaining + ' left this week · ' + q.rolling7 +
+      ' in the last 7 days · resets ' + escapeHtml(formatDay(q.resetsAt)) + '</div></section>' +
+      '<section><h2>Requests over time — ' + escapeHtml(o.rangeLabel || '') + '</h2>' +
+      chartSvg(buckets, { width: 680, height: 200 }) +
+      '<div class="sub">' + total + ' request' + (total === 1 ? '' : 's') + ' in this period</div></section>' +
+      '<section><h2>Contacts (' + records.length + ')</h2><table><thead><tr>' +
+      CSV_COLUMNS.map((c) => '<th>' + escapeHtml(c[0]) + '</th>').join('') +
+      '</tr></thead><tbody>' + rows + '</tbody></table></section>' +
+      '<footer>LinkedIn Spider · <a href="https://celox.io">celox.io</a></footer></body></html>';
+  }
+
   const LC = {
     getCsrfToken,
     getProfileId,
@@ -547,7 +952,35 @@
     CONNECT_TEXTS,
     SEND_WITHOUT_NOTE,
     SEND_WITHOUT_NOTE_RE,
-    MAX_CLICK_FAILS
+    MAX_CLICK_FAILS,
+    WEEKLY_QUOTA,
+    EVENT_MAX_AGE_DAYS,
+    EVENT_CAP,
+    CHART_RANGES,
+    rangeByKey,
+    toMs,
+    normalizeEvents,
+    appendEvent,
+    startOfDay,
+    startOfWeek,
+    isoWeek,
+    formatDay,
+    weekQuota,
+    bucketEvents,
+    chartSvg,
+    escapeHtml,
+    reportHtml,
+    reportFilename,
+    htmlDataUrl,
+    BACKUP_APP,
+    BACKUP_SCHEMA,
+    BACKUP_KEYS,
+    RECORD_FIELDS,
+    sanitizeRecipeForBackup,
+    buildBackup,
+    parseBackup,
+    backupFilename,
+    jsonDataUrl
   };
 
   root.LC = LC;

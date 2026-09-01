@@ -30,10 +30,10 @@ Debug via DevTools Console on the LinkedIn tab — all logs prefixed with `[LC]`
 
 Two content-script worlds + the popup. The split between `lib.js` and `content.js` is the key thing to understand:
 
-- **`lib.js`** (isolated world) — All pure / DOM-query / recipe helpers, wrapped in a UMD-style IIFE. Exposed on `window.LC` for the extension *and* `module.exports` for tests (so the same file is the unit-test target). Contains: `getCsrfToken`, `getProfileId`, `isConnectButton`, `findNextConnect`, `findConfirmButton`, `realClick`, the self-healing helpers `isInviteRequest`, `buildInviteRequest`, `isUsableRecipe`, `DEFAULT_INVITE_RECIPE`, plus the contact-log/export helpers `cleanName`, `findCardRoot`, `extractCardInfo`, `buildRecord`, `toCsv`, `csvDataUrl`, `csvFilename`, `appendRecord`, `profileIdsFromLog`. **Loaded before `content.js`** (see `manifest.json` `content_scripts.js` order) **and also by `popup.html`**, which needs the CSV helpers. Put any logic you'd want to unit-test here, not in `content.js`.
+- **`lib.js`** (isolated world) — All pure / DOM-query / recipe helpers, wrapped in a UMD-style IIFE. Exposed on `window.LC` for the extension *and* `module.exports` for tests (so the same file is the unit-test target). Contains: `getCsrfToken`, `getProfileId`, `isConnectButton`, `findNextConnect`, `findConfirmButton`, `realClick`, the self-healing helpers `isInviteRequest`, `buildInviteRequest`, `isUsableRecipe`, `DEFAULT_INVITE_RECIPE`, the contact-log/export helpers `cleanName`, `findCardRoot`, `extractCardInfo`, `buildRecord`, `toCsv`, `csvDataUrl`, `csvFilename`, `appendRecord`, `profileIdsFromLog`, and the v2.9.0 quota/chart/backup layer `normalizeEvents`, `appendEvent`, `startOfWeek`, `isoWeek`, `weekQuota`, `CHART_RANGES`, `bucketEvents`, `chartSvg`, `escapeHtml`, `reportHtml`, `buildBackup`, `parseBackup`, `sanitizeRecipeForBackup`. **Loaded before `content.js`** (see `manifest.json` `content_scripts.js` order) **and also by `popup.html`**, which needs the CSV helpers. Put any logic you'd want to unit-test here, not in `content.js`.
 - **`content.js`** (isolated world) — Stateful orchestration IIFE. Pulls helpers off `window.LC`, runs a 1.5s `setInterval` (`tick()`). Holds runtime state: `active`, `pending` (in-flight guard), `rateLimited`, `count`, `learnedRecipe`, and `processedProfiles` (a `Set` of profile IDs). Owns the recipe-driven network call (`sendInvitation` → `trySendWithRecipe`, preferring `learnedRecipe` then `DEFAULT_INVITE_RECIPE`), the `clickFallback`, the badge, the `window.message` listener that receives captured recipes, and the popup message listener.
 - **`interceptor.js`** (**MAIN world**, `run_at: document_start`) — Patches `window.fetch` and `XMLHttpRequest` to detect LinkedIn's own "send invitation" request, capture URL/headers/body, and `window.postMessage` the recipe to `content.js`. Runs in the page world so it can see the page's own network calls; **cannot** use `window.LC` (different world), so its invite-detection heuristic is duplicated from `lib.js`'s `isInviteRequest` — keep the two in sync.
-- **`popup.html` / `popup.js`** — Popup UI. Talks to the content script via `chrome.tabs.sendMessage`, polls status every 1s while open. Shows API mode (`default` vs `self-healed ✓`), the contact-log size, and owns the CSV export. Loads `lib.js` **before** `popup.js` (a contract pinned in `test/popup-export.test.js` — without it `LC` is undefined and the export button throws). State (`lcEnabled`, `lcCount`, `lcRecipe`, `lcLog`) persisted in `chrome.storage.local`.
+- **`popup.html` / `popup.js`** — Popup UI, **300px wide and capped at 596px tall**. Talks to the content script via `chrome.tabs.sendMessage`, polls status every 1s while open. Shows the weekly quota, the activity chart, API mode (`default` vs `self-healed ✓`), the contact-log size, and owns the CSV / HTML-report / backup exports plus restore and the footer. Loads `lib.js` **before** `popup.js` (a contract pinned in `test/popup-export.test.js` — without it `LC` is undefined and the export button throws). State (`lcEnabled`, `lcCount`, `lcRecipe`, `lcLog`, `lcEvents`, `lcRange`) persisted in `chrome.storage.local`.
 - **`styles.css`** — Popup styling only (NOT injected into LinkedIn). Styles for the in-page 🍻 marker/tooltip live in `content.js` (`injectStyles()` appends a `<style id="lc-styles">` once on first success).
 
 ### Self-healing recipe flow
@@ -93,8 +93,35 @@ Helpers live in `lib.js`; update them there if LinkedIn changes its DOM:
 | `getStatus`  | popup → content | —                   | `{ active, count, healed }` |
 | `resetCount` | popup → content | —                   | `{ ok: true }`      |
 | `clearLog`   | popup → content | —                   | `{ ok: true }`      |
+| `reloadState`| popup → content | —                   | `{ ok: true }`      |
+
+`reloadState` is sent after a restore so the tab re-reads storage instead of running on pre-restore counters. It **merges** into `processedProfiles` rather than replacing it — a restore that shrinks the log must not make the current session re-ask people it already contacted.
 
 If `sendMessage` hits `chrome.runtime.lastError`, the content script isn't loaded — the popup silently no-ops (user must reload the tab).
+
+## Weekly quota, activity chart, backup (v2.9.0)
+
+**The quota counts `lcEvents`, not `lcLog`.** `lcEvents` is a bare array of epoch-ms send timestamps appended on every success; the contact log is deduplicated by `profileId`, FIFO-capped at 5000 and wiped by `Clear Log`, so counting it would under-report what LinkedIn actually saw. `Clear Log` therefore leaves `lcEvents` alone — timestamps carry no personal data, and the quota has to stay honest. Pruned at `EVENT_MAX_AGE_DAYS` (400) / `EVENT_CAP` (20000).
+
+- **Back-fill on upgrade** is keyed on `lcEvents === undefined`, **not on "empty"**. An empty series is a real state (log cleared) and must never be re-seeded — pinned by a test.
+- **Week = Monday 00:00 local** (`startOfWeek`), German/ISO convention. `weekQuota` also returns `rolling7`, because LinkedIn throttles on a sliding window and a Sunday+Monday burst trips it while the calendar week still looks fine. All date maths goes through `Date` setters, never `+ n * 86400000` — the latter drifts across DST.
+- **The extension never stops itself at 200.** The display informs; auto-stopping was not asked for and would be a behaviour change.
+- **Chart is hand-rolled inline SVG.** A Chrome popup runs under `script-src 'self'`, so a CDN chart library cannot load at all, and a bundled one would be the extension's only runtime dependency. `chartSvg()` returns a *string*, which is what lets the popup and the HTML report share one renderer and lets tests assert on structure.
+- ⚠️ **The popup polls once a second.** `renderStats()` keeps a fingerprint (`range:len:first:last`) and only rewrites the SVG on a real change — an unconditional `innerHTML` would tear off a tooltip mid-hover. Same house rule as the hue app's fingerprint lock.
+- **Bars carry a transparent full-height `.lc-hit` rect painted *after* them**, so a zero-count column still has a hover target and the bar can't swallow the `<title>`.
+- **Backup strips session headers** (`csrf-token`, `cookie`, `authorization`, `x-li-identity`) from the learned recipe — a backup file gets passed around, and a fresh CSRF token is injected on every send anyway, so nothing is lost.
+- **`parseBackup` rejects whole or not at all**: app marker, `type`, schema (a *newer* schema is refused, not half-read), then per-field coercion through a whitelist. The popup only writes on `ok: true`, so a bad import cannot half-overwrite a good log.
+- **A restore always writes `lcEnabled: false`** — set inside `parseBackup`, not just in the UI, so the safety property is testable.
+
+⚠️ **`&` in the donate URL must be `&amp;` in `popup.html`.** `&curren` is a legacy named character reference (¤), so a raw `&currency_code=` is mangled by the HTML parser. Pinned in `test/version.test.js`.
+
+⚠️ **A Chrome popup is capped at 600px tall — anything past that scrolls out of sight, footer included.** Adding the quota panel and the chart pushed the page to 756px, which put the version and the links below the fold. It is back to **596px** because the three figures became a side-by-side strip (`.stats`, was three full-width `.counter-row`s) and Report/Backup/Restore share one `.btn-row`. Budget accordingly before adding another block; `test/styles.test.js` pins both arrangements.
+
+⚠️ **Measure contrast, do not eyeball it.** The muted tone introduced with this UI (`#8a9199`) shipped at **3.19:1** — below the 4.5:1 floor — and nothing but a browser measurement caught it. It is `#6a7078` (5.0:1) now, in `styles.css` **and** in the report's inline stylesheet inside `lib.js`. `test/styles.test.js` computes the WCAG ratio from the stylesheet and fails under 4.5:1 (3:1 for the large bold figures), so this cannot silently come back.
+
+⚠️ **The suite pins `TZ=Europe/Berlin`** (`vitest.config.js`). The quota and the chart are calendar-local, and the defect naive `+ n * 86_400_000` maths causes only shows where clocks actually shift — in UTC the DST guards pass either way and are worthless. `addDays` is where it bites (day columns step midnight→midnight across the Sunday switch); `startOfWeek` happens to be equivalent under a Monday-start week, because European switches land on a Sunday at 02:00 and so never fall between two weekday midnights. It still uses calendar setters, for timezones where that is not true.
+
+⚠️ **`appendEvent` sorts after appending.** The cap trims from the front, so an out-of-order write (two tabs, a skewed clock, a restored file) would otherwise evict the *newest* entry instead of the oldest. Found by a test, not in the field.
 
 ## Releasing
 
@@ -104,10 +131,12 @@ If `sendMessage` hits `chrome.runtime.lastError`, the content script isn't loade
 
 ## Versioning
 
-User-facing version lives in `manifest.json` (currently 2.8.0); `package.json` version is independent and lags. Bump `manifest.json` for releases.
+SemVer. The user-facing version lives in `manifest.json` (currently **2.9.0**) and is shown in the popup footer, read via `chrome.runtime.getManifest().version` — never hard-coded. `package.json` used to lag independently (it sat at 2.4.0 through five releases); since 2.9.0 the two must match and `test/version.test.js` pins that, along with the version badge in both READMEs and the presence of a `### <version>` changelog heading. Bump `manifest.json` + `package.json` + both README badges + both changelogs together.
 
 ## Testing conventions
 
 `test/lib.test.js` + `test/export.test.js` cover the pure/DOM helpers. `test/content-log.test.js` and `test/popup-export.test.js` load `content.js` and `popup.html`+`popup.js` **for real** in jsdom (chrome + `fetch` stubbed, fake timers) rather than re-implementing the logic — the older `test/content.test.js` / `test/popup.test.js` only simulate it, so a change there can pass while the shipped file is broken.
+
+`test/stats.test.js`, `test/backup.test.js`, `test/report.test.js`, `test/styles.test.js` and `test/version.test.js` are pure/file-level — `styles.test.js` reads `styles.css`/`lib.js`/`popup.html` as text and asserts on them (contrast ratios, the button-row arrangement, and that every id `popup.js` calls `getElementById` for actually exists). ⚠️ The report's stylesheet lives inside JS string concatenation in `lib.js`; join the literals (`/'\s*\+\s*\n?\s*'/`) before reading rules out of it, or every rule but the first reads as missing. `test/popup-stats.test.js` loads `popup.html` + `popup.js` for real and stubs `FileReader` with a synchronous stand-in — the point is the popup's own wiring (change → read → parse → arm → confirm), not jsdom's reader.
 
 ⚠️ **Mutate every new assertion once.** A test you have not watched fail is not a guarantee. This bit during v2.8.0: the "ignores duplicate visually-hidden text" test asserted only the name — which `firstLine` returns with or without dedupe, so removing the dedupe left it green. It is now anchored on the location column, which is what the dedupe actually buys.

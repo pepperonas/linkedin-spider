@@ -140,6 +140,63 @@ describe('content script contact log', () => {
     expect(fetchCalls.length).toBe(1);
   });
 
+  it('records a send timestamp so the weekly quota can count it', async () => {
+    buildSearchCard();
+    await runOneTick();
+
+    expect(Array.isArray(storage.lcEvents)).toBe(true);
+    expect(storage.lcEvents.length).toBe(1);
+    expect(storage.lcEvents[0]).toBe(Date.parse(storage.lcLog[0].ts));
+  });
+
+  it('writes no timestamp when the invitation fails', async () => {
+    globalThis.fetch = vi.fn(() =>
+      Promise.resolve({ ok: false, status: 500, text: () => Promise.resolve('boom') }));
+    buildSearchCard();
+    await loadContentScript();
+    listeners[listeners.length - 1]({ action: 'toggle', enabled: true }, null, () => {});
+    await vi.advanceTimersByTimeAsync(1600);
+    await flush();
+
+    expect(storage.lcEvents === undefined || storage.lcEvents.length === 0).toBe(true);
+  });
+
+  it('seeds the quota history from an existing log on first run after the upgrade', async () => {
+    storage.lcLog = [
+      { ts: '2026-08-30T10:00:00.000Z', name: 'A', profileId: 'A1' },
+      { ts: '2026-08-31T10:00:00.000Z', name: 'B', profileId: 'B1' }
+    ];
+    await loadContentScript();
+    expect(storage.lcEvents).toEqual([
+      Date.parse('2026-08-30T10:00:00.000Z'),
+      Date.parse('2026-08-31T10:00:00.000Z')
+    ]);
+  });
+
+  it('does not re-seed once the history exists, not even when it is empty', async () => {
+    storage.lcLog = [{ ts: '2026-08-30T10:00:00.000Z', name: 'A', profileId: 'A1' }];
+    storage.lcEvents = [];
+    await loadContentScript();
+    expect(storage.lcEvents).toEqual([]);
+  });
+
+  it('shows the weekly quota on the in-page badge', async () => {
+    buildSearchCard();
+    await runOneTick();
+    const badge = document.getElementById('lc-badge');
+    expect(badge.textContent).toMatch(/1\/200/);
+  });
+
+  it('keeps the quota history when the contact log is cleared', async () => {
+    buildSearchCard();
+    const handle = await runOneTick();
+    expect(storage.lcEvents.length).toBe(1);
+
+    handle({ action: 'clearLog' }, null, () => {});
+    expect(storage.lcLog).toEqual([]);
+    expect(storage.lcEvents.length).toBe(1);
+  });
+
   it('keeps the log when only the counter is reset', async () => {
     buildSearchCard();
     const handle = await runOneTick();

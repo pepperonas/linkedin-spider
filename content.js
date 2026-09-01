@@ -3,7 +3,8 @@
   const {
     getCsrfToken, getProfileId, getVanityFromCard, findNextConnect, findConfirmButton,
     realClick, buildInviteRequest, isUsableRecipe, DEFAULT_INVITE_RECIPE, MAX_CLICK_FAILS,
-    extractCardInfo, buildRecord, appendRecord, profileIdsFromLog, LOG_CAP
+    extractCardInfo, buildRecord, appendRecord, profileIdsFromLog, LOG_CAP,
+    appendEvent, weekQuota
   } = window.LC;
   let active = false;
   let intervalId = null;
@@ -39,9 +40,28 @@
   badge.textContent = '🕸️ ready';
   document.body.appendChild(badge);
 
+  // The badge keeps the weekly allowance in view while requests are going out —
+  // that is exactly when it matters. Text and quota are tracked separately so a
+  // quota refresh never wipes the state message and vice versa.
+  let badgeText = 'ready';
+  let badgeColor = '#333';
+  let quotaSuffix = '';
+
+  function renderBadge() {
+    badge.textContent = '🕸️ ' + badgeText + (quotaSuffix ? ' · ' + quotaSuffix : '');
+    badge.style.background = badgeColor;
+  }
+
   function updateBadge(text, color) {
-    badge.textContent = '🕸️ ' + text;
-    badge.style.background = color || '#333';
+    badgeText = text;
+    badgeColor = color || '#333';
+    renderBadge();
+  }
+
+  function setQuotaFromEvents(events) {
+    const q = weekQuota(events, Date.now());
+    quotaSuffix = q.used + '/' + q.limit + ' wk';
+    renderBadge();
   }
 
   // --- 🍻 Beer-emoji success marker: Material 3 Expressive motion ---------------
@@ -337,16 +357,26 @@
     return false;
   }
 
-  // Persist one sent request. The log is re-read immediately before writing so
-  // a second LinkedIn tab's entries aren't clobbered by a stale in-memory copy.
-  function logRecord(cardInfo, profileId, method) {
+  // Persist one sent request: the contact record AND a bare timestamp.
+  // The timestamp series is what the weekly quota and the chart count — the
+  // contact log is deduplicated, capped and user-clearable, so counting it
+  // would under-report what LinkedIn actually saw.
+  // Both are re-read immediately before writing so a second LinkedIn tab's
+  // entries aren't clobbered by a stale in-memory copy.
+  function recordSuccess(cardInfo, profileId, method) {
     const record = buildRecord(cardInfo, {
       profileId: profileId || '',
       method,
       pageUrl: location.href
     });
-    chrome.storage.local.get(['lcLog'], (res) => {
-      chrome.storage.local.set({ lcLog: appendRecord(res.lcLog, record, LOG_CAP) });
+    const when = Date.parse(record.ts);
+    chrome.storage.local.get(['lcLog', 'lcEvents'], (res) => {
+      const events = appendEvent(res.lcEvents, when);
+      chrome.storage.local.set({
+        lcLog: appendRecord(res.lcLog, record, LOG_CAP),
+        lcEvents: events
+      });
+      setQuotaFromEvents(events);
     });
     console.log(LOG, 'Logged contact:', record.name || '(no name)', record.profileUrl);
   }
@@ -455,7 +485,7 @@
     if (ok) {
       count++;
       chrome.storage.local.set({ lcCount: count });
-      logRecord(cardInfo, profileId, method);
+      recordSuccess(cardInfo, profileId, method);
       console.log(LOG, 'Request #' + count + ' sent to', name);
       updateBadge('✅ #' + count + ' ' + name.substring(0, 20), '#2e7d32');
 
@@ -496,6 +526,11 @@
       count = 0;
       chrome.storage.local.set({ lcCount: 0 });
       sendResponse({ ok: true });
+    } else if (msg.action === 'reloadState') {
+      // A restore rewrote storage under us — pull the new state into memory so
+      // this tab doesn't keep running on the pre-restore counters.
+      chrome.storage.local.get(['lcCount', 'lcRecipe', 'lcLog', 'lcEvents'], applyStoredState);
+      sendResponse({ ok: true });
     } else if (msg.action === 'clearLog') {
       // Also drop the in-memory guard, otherwise the popup would clear the log
       // while this tab silently keeps skipping the very people it just forgot.
@@ -505,8 +540,8 @@
     }
   });
 
-  chrome.storage.local.get(['lcCount', 'lcRecipe', 'lcLog'], (result) => {
-    if (result.lcCount) count = result.lcCount;
+  function applyStoredState(result) {
+    count = result.lcCount || 0;
     if (result.lcRecipe && isUsableRecipe(result.lcRecipe)) {
       learnedRecipe = result.lcRecipe;
       console.log(LOG, 'Restored learned invite recipe from storage');
@@ -515,5 +550,21 @@
     const known = profileIdsFromLog(result.lcLog);
     for (const id of known) processedProfiles.add(id);
     if (known.size) console.log(LOG, 'Skipping', known.size, 'already-contacted profiles');
-  });
+
+    // First run after the upgrade: seed the quota history from the timestamps
+    // already in the contact log. Keyed on "undefined", not on "empty" — an
+    // empty series is a real state (log cleared) and must not be re-seeded.
+    let events = result.lcEvents;
+    if (events === undefined) {
+      events = [];
+      for (const r of result.lcLog || []) {
+        if (r && r.ts) events = appendEvent(events, r.ts);
+      }
+      chrome.storage.local.set({ lcEvents: events });
+      if (events.length) console.log(LOG, 'Seeded quota history with', events.length, 'past requests');
+    }
+    setQuotaFromEvents(events);
+  }
+
+  chrome.storage.local.get(['lcCount', 'lcRecipe', 'lcLog', 'lcEvents'], applyStoredState);
 })();

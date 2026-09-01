@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.7.4-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.9.0-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/manifest-v3-green?style=flat-square&logo=googlechrome&logoColor=white" alt="Manifest V3">
   <img src="https://img.shields.io/badge/world-MAIN_%2B_ISOLATED-8957e5?style=flat-square" alt="MAIN + ISOLATED world">
   <img src="https://img.shields.io/badge/platform-Chrome-yellow?style=flat-square&logo=googlechrome&logoColor=white" alt="Chrome">
@@ -37,7 +37,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/tests-67_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-263_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
   <img src="https://img.shields.io/badge/tested_with-Vitest-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest">
   <img src="https://img.shields.io/badge/DOM-jsdom-15a2bb?style=flat-square" alt="jsdom">
   <img src="https://img.shields.io/badge/build-no_build_step-brightgreen?style=flat-square" alt="No Build Step">
@@ -86,8 +86,13 @@ LinkedIn ändert sein Frontend (CSS-Klassen, DOM-Struktur) und seine internen AP
 - Anfragen-Zähler (persistent in `chrome.storage`)
 - API-Modus-Anzeige im Popup (`default` / `self-healed ✓`)
 - Counter zurücksetzen
+- 📊 **Wochenkontingent im Popup** — 200 freie Kontaktanfragen pro Woche, verbraucht/verbleibend mit Fortschrittsbalken (plus rollierender 7-Tage-Wert); steht auch im Seiten-Badge
+- 📈 **Verlaufs-Chart** mit wählbarem Zeitraum (7 d / 30 d / 90 d / 1 Jahr) — im Popup und im HTML-Report
+- 💾 **Backup & Wiederherstellung** — alle Werte als JSON sichern und zurückspielen
 - 📇 **Kontaktprotokoll** — jede gesendete Anfrage wird dauerhaft gespeichert (Name, Datum, Profil-URL, Headline, Firma, Ort, Kontaktgrad, Profil-ID, Sendeweg, Suchseite)
 - ⬇ **CSV-Export** aus dem Popup — Excel-fertig (Semikolon + UTF-8-BOM), Dateiname mit Datumsstempel als Vorschlag
+- 📊 **HTML-Report-Export** — eigenständige Datei mit Chart, Kontingent und Kontakttabelle, ohne externe Assets
+- 🔖 **Versionsnummer + Links im Footer** des Popups (SemVer)
 - 🔁 **Duplikatsperre über Sessions** — wer einmal im Protokoll steht, wird nie erneut angefragt
 - Visuelles Status-Badge (unten rechts auf der Seite)
 - Erfolgreiche Vernetzungen werden mit 🍻-Emoji markiert — mit Material-3-Expressive-Physik-Animation (Fall mit Gravitation, Aufprall-Squash & abklingende Bounces) und Custom-Tooltip beim Hover
@@ -128,6 +133,29 @@ git clone https://github.com/pepperonas/linkedin-spider.git
 3. Toggle auf AN schalten
 4. Badge unten rechts zeigt Fortschritt in Echtzeit
 
+**Wochenkontingent:**
+
+LinkedIn gibt **200 Kontaktanfragen pro Woche** frei. Das Popup zeigt oben, wie viele davon in der laufenden Woche verbraucht sind, wie viele bleiben und wann das Kontingent zurückgesetzt wird. Der Balken färbt sich ab 80 % orange und bei 0 verbleibenden Anfragen rot.
+
+- **Woche = Kalenderwoche ab Montag 00:00 Ortszeit.** Zusätzlich steht daneben der **rollierende 7-Tage-Wert** — LinkedIn drosselt über ein gleitendes Fenster, ein Sonntag-plus-Montag-Schub kann also anschlagen, während die Kalenderwoche noch harmlos aussieht.
+- Gezählt wird eine separate Zeitstempel-Liste (`lcEvents`), **nicht** das Kontaktprotokoll: das ist dedupliziert, gedeckelt und löschbar und würde zu wenig melden. `Clear Log` löscht deshalb die Kontakte, **nicht** die Kontingent-Historie.
+- Das Seiten-Badge trägt den Stand dauerhaft mit (`🕸️ ✅ #12 Name · 43/200 wk`), damit das Kontingent genau dann sichtbar ist, wenn Anfragen rausgehen.
+- Beim ersten Start nach dem Update wird die Historie einmalig aus den Zeitstempeln des vorhandenen Protokolls befüllt.
+- Die Extension **stoppt nicht** von selbst bei 200 — die Anzeige informiert, die Entscheidung bleibt beim Nutzer.
+
+**Verlauf:**
+
+Unter dem Kontingent liegt ein Balken-Chart der gesendeten Anfragen. Der Zeitraum ist über Chips wählbar und wird gemerkt (`chrome.storage`):
+
+| Zeitraum | Auflösung | Spalten |
+|----------|-----------|---------|
+| 7 d | Tag | 7 |
+| 30 d | Tag | 30 |
+| 90 d | Woche (Mo–So) | 13 |
+| 1 y | Monat | 12 |
+
+Die laufende Spalte ist heller gezeichnet und im Tooltip als „in progress" markiert — sonst läse sich der noch unfertige Tag als Einbruch. Das Chart ist handgeschriebenes Inline-SVG: ein Chrome-Popup läuft unter `script-src 'self'`, eine CDN-Chart-Bibliothek ist dort gar nicht ladbar — und eine gebündelte wäre die einzige Laufzeit-Abhängigkeit der ganzen Extension.
+
 **Kontakte exportieren:**
 
 Jede erfolgreiche Anfrage landet im Protokoll (`Saved contacts` im Popup). **⬇ Export contacts as CSV** öffnet den Speichern-Dialog mit einem vorgeschlagenen Namen wie `linkedin-spider-anfragen-2026-08-30_1432.csv`.
@@ -147,12 +175,28 @@ Jede erfolgreiche Anfrage landet im Protokoll (`Saved contacts` im Popup). **⬇
 
 Die Karten-Felder sind Best-Effort: Ändert LinkedIn sein DOM, bleibt die betroffene Spalte leer — der Versand läuft unverändert weiter. Der Export liest direkt aus `chrome.storage` und funktioniert deshalb auch, wenn das Popup über einem Nicht-LinkedIn-Tab geöffnet wird. **Clear Log** löscht das Protokoll (zwei Klicks) und hebt damit auch die Duplikatsperre auf.
 
+**Report exportieren (mit Chart):**
+
+**📊 Report** schreibt eine eigenständige HTML-Datei (`linkedin-spider-report-2026-09-01_1432.html`): Wochenkontingent, das Chart des **gerade gewählten** Zeitraums und die vollständige Kontakttabelle. Alles ist inline — kein Skript, kein CDN, keine Schriftart von außen; die Datei öffnet offline aus dem Dateisystem.
+
+**Backup & Wiederherstellung:**
+
+- **💾 Backup** schreibt alle gespeicherten Werte als JSON (`linkedin-spider-backup-2026-09-01_1432.json`): Kontaktprotokoll, Kontingent-Historie, Zähler, gewählter Zeitraum und das gelernte API-Recipe.
+- **↺ Restore** liest so eine Datei zurück — in zwei Schritten: Datei wählen, dann bestätigt ein zweiter Klick das Überschreiben.
+- **Der Import ist streng.** Fremde oder beschädigte Dateien werden **komplett** abgelehnt (Klartext-Fehler im Popup), es wird nichts geschrieben. Geprüft werden App-Kennung, Typ und Schema-Version; ein neueres Schema wird abgelehnt statt halb gelesen. Unbekannte Felder in Kontaktdatensätzen fallen weg, kaputte Zähler/Zeitstempel/Zeiträume werden auf gültige Werte gesetzt.
+- **Sicherheit:** Session-Header (`csrf-token`, `cookie`, `authorization`) werden aus dem Recipe **entfernt**, bevor es in die Datei geht — ein Backup, das man weiterreicht, trägt kein Sitzungs-Token. Funktional geht nichts verloren: bei jedem Versand wird ohnehin ein frischer CSRF-Token eingesetzt.
+- **Ein Restore startet nie den Versand.** `Auto-Connect` steht danach immer auf AUS, egal was in der Datei stand.
+
+**Footer im Popup:**
+
+Unten im Popup stehen die **Versionsnummer** (SemVer, direkt aus `manifest.json` gelesen — nie hart im Code) sowie Links zu [celox.io](https://celox.io), zur [Google-Maps-Bewertung](https://g.page/r/CXgdRV3QysvxEBM/review) und zur PayPal-Spende an `martin.pfeffer@celox.io`.
+
 **Status-Badge:**
 - "🕸️ ready" (grau) — Extension geladen, inaktiv
 - "🕸️ Active (X sent)" (grün) — Läuft, X Anfragen versendet
 - "🕸️ ⏳ Name..." (LinkedIn-Blau) — Anfrage wird gerade gesendet
 - "🕸️ 🧬 Recipe learned" (violett) — API-Request erfolgreich gelernt (Self-Healing)
-- "🕸️ ✅ #X Name" (dunkelgrün) — Erfolgreiche Anfrage
+- "🕸️ ✅ #X Name · 43/200 wk" (dunkelgrün) — Erfolgreiche Anfrage; der Zusatz ist der Wochenstand
 - "🕸️ ❌ Rate-Limit! 60s pause..." (rot) — LinkedIn 429, wartet automatisch
 - "🕸️ ❌ No CSRF Token!" (rot) — API-Fehler
 
@@ -163,9 +207,9 @@ Zwei Content-Script-Welten plus Popup:
 | Datei | World | Rolle |
 |-------|-------|-------|
 | `interceptor.js` | **MAIN** (`document_start`) | Patcht `fetch`/`XMLHttpRequest`, schneidet LinkedIns Invite-Request mit, schickt das "Recipe" per `postMessage` |
-| `lib.js` | ISOLATED | Reine, testbare Kernfunktionen: Selektoren, Recipe-Bau, Invite-Erkennung |
-| `content.js` | ISOLATED | Orchestrierung: DOM-Scan, recipe-getriebene API-Calls, Click-Fallback, Recipe-Lernen, Badge |
-| `popup.html` / `popup.js` | — | Popup-UI: Toggle, Counter, API-Modus, Kontaktprotokoll + CSV-Export (lädt `lib.js` mit) |
+| `lib.js` | ISOLATED | Reine, testbare Kernfunktionen: Selektoren, Recipe-Bau, Invite-Erkennung, Kontingent-/Chart-Mathematik, SVG-Chart, Backup-Format |
+| `content.js` | ISOLATED | Orchestrierung: DOM-Scan, recipe-getriebene API-Calls, Click-Fallback, Recipe-Lernen, Badge, Kontingent-Historie |
+| `popup.html` / `popup.js` | — | Popup-UI: Toggle, Kontingent, Chart, Counter, API-Modus, CSV-/HTML-/Backup-Export, Restore, Footer (lädt `lib.js` mit) |
 | `styles.css` | — | Popup-Styling |
 | `manifest.json` | — | Chrome Extension Manifest V3 |
 | `icon.png` | — | Extension-Icon |
@@ -177,13 +221,19 @@ npm install
 npm test
 ```
 
-**136 Unit- und Integrationstests** mit Vitest + jsdom:
+**263 Unit- und Integrationstests** mit Vitest + jsdom (Zeitzone in `vitest.config.js` auf `Europe/Berlin` gepinnt — die Kontingent- und Chart-Rechnung ist kalenderlokal, und der Fehler, den naive Millisekunden-Arithmetik erzeugt, existiert nur dort, wo die Uhren wirklich springen):
 - `test/lib.test.js` — Kernfunktionen, Self-Healing-Helfer (Recipe-Bau, Invite-Erkennung), Mehrsprachen-Erkennung
 - `test/export.test.js` — Namensschälung, Kartenextraktion, CSV-Erzeugung (Quoting, Injection-Schutz, BOM), Dateiname, Protokoll-Deckel
 - `test/content-log.test.js` — lädt `content.js` echt und fährt einen kompletten Tick: erfolgreicher Send landet mit Kartendaten im Protokoll, Duplikatsperre greift
 - `test/popup-export.test.js` — lädt `popup.html` + `popup.js` echt: Export-Download, Abbruch-Verhalten, Zwei-Schritt-Löschen
 - `test/content.test.js` — Integrationstests für Message-Handling und DOM-Interaktion
 - `test/popup.test.js` — Popup-UI und Chrome-API-Tests
+- `test/stats.test.js` — Kontingent-Rechnung (Kalenderwoche, rollierende 7 Tage, Kappung), Bucket-Bildung je Zeitraum, SVG-Chart (Skalierung, laufende Spalte, Escaping, Leerzustand)
+- `test/backup.test.js` — Backup-Format, Secret-Stripping, strenge Import-Validierung (fremde/kaputte/zu neue Dateien)
+- `test/popup-stats.test.js` — lädt `popup.html` + `popup.js` echt: Kontingent-Anzeige, Chart + Zeitraumwahl, HTML-Report, Backup-/Restore-Roundtrip, Footer-Links
+- `test/report.test.js` — HTML-Report: Eigenständigkeit (kein Skript, kein externer Verweis), Escaping gescrapter Namen, Kontingent-/Zeitraum-Angaben, Leerzustand
+- `test/styles.test.js` — Kontrast-Untergrenzen (4,5:1 bzw. 3:1) für Popup **und** Report-CSS, Layout-Vertrag der Knopfreihe, jede von `popup.js` gesuchte ID existiert im Markup
+- `test/version.test.js` — SemVer, Gleichstand `manifest.json` ↔ `package.json` ↔ README-Badge, Footer-Vertrag
 - `test/release.test.js` — prüft, dass das Release-ZIP jede vom Manifest referenzierte Datei enthält
 
 Einzelne Datei / einzelner Test:
@@ -198,6 +248,20 @@ npx vitest run -t "buildInviteRequest"
 - **Release** — Bei Push eines `v*`-Tags werden Tests ausgeführt und ein GitHub Release mit ZIP erstellt
 
 ## Changelog
+
+### 2.9.0 — Kontingent, Verlauf, Backup
+
+- **Wochenkontingent im Popup**: 200 freie Anfragen/Woche, verbraucht + verbleibend mit Fortschrittsbalken, Reset-Datum, Warnfarbe ab 80 % und bei 0. Zusätzlich der **rollierende 7-Tage-Wert**, weil LinkedIn über ein gleitendes Fenster drosselt
+- Der Stand steht auch im **Seiten-Badge** — sichtbar genau dann, wenn Anfragen rausgehen
+- Gezählt wird eine **eigene Zeitstempel-Liste** statt des Kontaktprotokolls (das ist dedupliziert, gedeckelt und löschbar und würde zu wenig melden); beim ersten Start nach dem Update wird sie einmalig aus dem vorhandenen Protokoll befüllt
+- **Verlaufs-Chart** mit wählbarem Zeitraum (7 d / 30 d / 90 d / 1 Jahr), Auswahl wird gemerkt; handgeschriebenes Inline-SVG ohne Abhängigkeit (ein Popup läuft unter `script-src 'self'`). Die laufende Spalte ist als „in progress" markiert. Neu gezeichnet wird nur bei echter Änderung — der Sekunden-Poll würde sonst laufende Tooltips abreißen
+- **HTML-Report-Export**: eigenständige Datei mit Chart, Kontingent und Kontakttabelle, komplett inline
+- **Backup & Wiederherstellung** aller Werte als JSON. Der Import ist streng (App-Kennung, Typ, Schema; fremde/kaputte Dateien werden komplett abgelehnt, ohne etwas zu schreiben), Session-Header werden vor dem Schreiben aus dem Recipe entfernt, und ein Restore setzt `Auto-Connect` immer auf AUS
+- **SemVer + Footer** im Popup: Version aus dem Manifest, Links zu celox.io, Google-Maps-Bewertung und PayPal-Spende
+- `manifest.json` und `package.json` tragen ab jetzt dieselbe Version — ein Test hält das fest (sie waren fünf Releases auseinandergelaufen)
+- **Popup kompaktiert**: Chrome deckelt Popups bei 600 px Höhe — mit den neuen Blöcken lag der Footer darunter. Die drei Kennzahlen stehen jetzt als Streifen nebeneinander, Report/Backup/Restore teilen sich eine Reihe (596 px gemessen)
+- **Kontrast korrigiert**: der neu eingeführte Grauton lag bei 3,19:1 und damit unter der 4,5:1-Grenze; alle Textrollen messen jetzt 5,0–5,7:1. Ein Test hält die Untergrenze fest — für das Popup **und** für das Report-CSS
+- Testsuite von 136 auf 263 Tests, alle neuen Zusicherungen mutationsgeprüft
 
 ### 2.8.0 — Kontaktprotokoll & CSV-Export
 
