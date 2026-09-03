@@ -789,7 +789,7 @@
   // --- Backup / restore -----------------------------------------------------
   const BACKUP_APP = 'linkedin-spider';
   const BACKUP_SCHEMA = 1;
-  const BACKUP_KEYS = ['lcEnabled', 'lcCount', 'lcLog', 'lcEvents', 'lcRecipe', 'lcRange'];
+  const BACKUP_KEYS = ['lcEnabled', 'lcCount', 'lcLog', 'lcEvents', 'lcRecipe', 'lcRange', 'lcSeen'];
   const RECORD_FIELDS = ['ts', 'name', 'profileUrl', 'headline', 'company', 'location',
     'degree', 'profileId', 'method', 'pageUrl'];
   // Headers that carry a live session. The recipe works without them (a fresh
@@ -825,7 +825,8 @@
         lcLog: Array.isArray(s.lcLog) ? s.lcLog : [],
         lcEvents: normalizeEvents(s.lcEvents),
         lcRecipe: sanitizeRecipeForBackup(s.lcRecipe),
-        lcRange: rangeByKey(s.lcRange).key
+        lcRange: rangeByKey(s.lcRange).key,
+        lcSeen: addSeen([], Array.isArray(s.lcSeen) ? s.lcSeen : [])
       }
     };
   }
@@ -870,7 +871,8 @@
       lcLog,
       lcEvents: normalizeEvents(d.lcEvents),
       lcRecipe: isUsableRecipe(d.lcRecipe) ? d.lcRecipe : null,
-      lcRange: rangeByKey(d.lcRange).key
+      lcRange: rangeByKey(d.lcRange).key,
+      lcSeen: addSeen([], Array.isArray(d.lcSeen) ? d.lcSeen : [])
     };
     return {
       ok: true,
@@ -941,6 +943,97 @@
       CSV_COLUMNS.map((c) => '<th>' + escapeHtml(c[0]) + '</th>').join('') +
       '</tr></thead><tbody>' + rows + '</tbody></table></section>' +
       '<footer>LinkedIn Spider · <a href="https://celox.io">celox.io</a></footer></body></html>';
+  }
+
+  // --- Durable seen-list ------------------------------------------------------
+  // The duplicate guard used to be seeded from the contact log alone — which is
+  // FIFO-capped at LOG_CAP (5000 rows ≈ 25 weeks at 200 a week). After that the
+  // oldest people quietly became askable again. `lcSeen` is a bare list of
+  // profile IDs (~20 bytes each) that outlives the log by a wide margin.
+  const SEEN_CAP = 100000;
+
+  function addSeen(seen, ids, cap) {
+    const limit = (typeof cap === 'number' && cap > 0) ? cap : SEEN_CAP;
+    const list = Array.isArray(seen) ? seen.filter((x) => typeof x === 'string' && x) : [];
+    const have = new Set(list);
+    for (const id of Array.isArray(ids) ? ids : [ids]) {
+      if (typeof id !== 'string' || !id || have.has(id)) continue;
+      have.add(id);
+      list.push(id);
+    }
+    return list.length > limit ? list.slice(list.length - limit) : list;
+  }
+
+  function seenIds(seen) {
+    const out = new Set();
+    for (const x of Array.isArray(seen) ? seen : []) if (typeof x === 'string' && x) out.add(x);
+    return out;
+  }
+
+  // --- "Pending" state after a click, per locale ------------------------------
+  // The click fallback treats the button flipping to "pending" as success. It
+  // only knew DE/EN — on the other five locales a successful click without a
+  // dialog counted as a failure.
+  const PENDING_TEXTS = [
+    'Ausstehend',     // DE
+    'Pending',        // EN
+    'Pendiente',      // ES
+    'In attesa',      // IT
+    'En attente',     // FR
+    'Pendente',       // PT
+    'In afwachting'   // NL
+  ];
+
+  function isPendingText(text) {
+    const t = normalizeSpace(text).toLowerCase();
+    if (!t) return false;
+    return PENDING_TEXTS.some((p) => t.includes(p.toLowerCase()));
+  }
+
+  // The extension's job is search result pages. The badge stays out of the
+  // way everywhere else unless a run is active.
+  function isSearchPage(pathname) {
+    return /\/search\/results\//.test(String(pathname || ''));
+  }
+
+  // After this many consecutive send failures (API error AND click fallback
+  // failed) the run halts instead of grinding 3×6 s through every card on the
+  // page. The most likely cause is LinkedIn's weekly invitation limit — whose
+  // exact response is not known, so the guard keys on the symptom, not the
+  // message.
+  const MAX_CONSECUTIVE_FAILS = 5;
+
+  // --- Update check (opt-in) --------------------------------------------------
+  // Sideloaded ZIPs never update themselves. The options page can ask GitHub
+  // for the latest release — only after the user granted api.github.com, which
+  // is requested on their click, never on install.
+  const UPDATE_API = 'https://api.github.com/repos/pepperonas/linkedin-spider/releases/latest';
+  const UPDATE_ORIGIN = 'https://api.github.com/*';
+  const RELEASES_URL = 'https://github.com/pepperonas/linkedin-spider/releases';
+  const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+  function compareVersions(a, b) {
+    const parse = (v) => String(v || '').replace(/^v/i, '').split('.').map((n) => parseInt(n, 10) || 0);
+    const pa = parse(a), pb = parse(b);
+    for (let i = 0; i < 3; i++) {
+      if ((pa[i] || 0) > (pb[i] || 0)) return 1;
+      if ((pa[i] || 0) < (pb[i] || 0)) return -1;
+    }
+    return 0;
+  }
+
+  function parseLatestRelease(json) {
+    if (!json || typeof json !== 'object') return null;
+    const m = String(json.tag_name || '').match(/^v?(\d+\.\d+\.\d+)$/);
+    if (!m) return null;
+    const url = String(json.html_url || '');
+    if (!url.startsWith('https://github.com/pepperonas/linkedin-spider/')) return null;
+    return { version: m[1], url };
+  }
+
+  function updateCheckDue(info, now) {
+    const at = info && typeof info.checkedAt === 'number' ? info.checkedAt : 0;
+    return (now - at) >= UPDATE_CHECK_INTERVAL_MS;
   }
 
   // --- ops sync: push sent requests into celox ops as Rainmaker leads --------
@@ -1164,7 +1257,21 @@
     applyOpsResult,
     opsNormalizeUrl,
     opsValidToken,
-    opsSyncRun
+    opsSyncRun,
+    SEEN_CAP,
+    addSeen,
+    seenIds,
+    PENDING_TEXTS,
+    isPendingText,
+    isSearchPage,
+    MAX_CONSECUTIVE_FAILS,
+    UPDATE_API,
+    UPDATE_ORIGIN,
+    RELEASES_URL,
+    UPDATE_CHECK_INTERVAL_MS,
+    compareVersions,
+    parseLatestRelease,
+    updateCheckDue
   };
 
   root.LC = LC;

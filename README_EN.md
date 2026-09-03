@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.10.1-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.11.0-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/github/v/release/pepperonas/linkedin-spider?style=flat-square&label=release" alt="Latest Release">
   <img src="https://img.shields.io/github/release-date/pepperonas/linkedin-spider?style=flat-square&label=released" alt="Release Date">
   <img src="https://img.shields.io/badge/manifest-v3-green?style=flat-square&logo=googlechrome&logoColor=white" alt="Manifest V3">
@@ -48,7 +48,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/tests-392_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-439_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
   <img src="https://img.shields.io/badge/tested_with-Vitest-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest">
   <img src="https://img.shields.io/badge/DOM-jsdom-15a2bb?style=flat-square" alt="jsdom">
   <img src="https://img.shields.io/badge/assertions-mutation--probed-success?style=flat-square" alt="Mutation-probed">
@@ -359,6 +359,10 @@ Everything lives in `chrome.storage.local` — in the Chrome profile on your mac
 | `lcOps` | ops address, API token, auto-sync switch | options page |
 | `lcOpsState` | Per contact: acknowledged by ops / invalid / error (kept apart from `lcLog` so the worker and the content script never write the same list) | "Forget sync state" |
 | `lcOpsLast` | Summary of the last sync run | "Forget sync state" |
+| `lcSeen` | Durable list of contacted profile IDs (max. 100,000, ~20 bytes each) — the duplicate guard beyond the log's FIFO cap; seeded once from the log on the first run after 2.11.0 | Clear Log |
+| `lcHalt` | Reason and time when the circuit breaker (5 failures in a row) stopped the run | switching on again |
+| `lcLastApiError` | LinkedIn's last rejection (status, first 300 characters of the reply) — for diagnosis on the options page | — |
+| `lcUpdate` | Result of the last update check (only after your click, at most daily) | — |
 
 ### What leaves the browser
 
@@ -408,7 +412,7 @@ npx vitest run test/lib.test.js          # one file
 npx vitest run -t "buildInviteRequest"    # one test
 ```
 
-**392 unit and integration tests** with Vitest + jsdom (the timezone is pinned to `Europe/Berlin` in `vitest.config.js` — the quota and chart maths are calendar-local, and the bug naive millisecond arithmetic causes only exists where clocks actually shift):
+**439 unit and integration tests** with Vitest + jsdom (the timezone is pinned to `Europe/Berlin` in `vitest.config.js` — the quota and chart maths are calendar-local, and the bug naive millisecond arithmetic causes only exists where clocks actually shift):
 
 | File | Checks |
 |---|---|
@@ -421,6 +425,8 @@ npx vitest run -t "buildInviteRequest"    # one test
 | `test/ops-sync.test.js` | the sync core (`opsSyncRun` with `fetch` injected): bearer token, batching, matching by response index, 401/network errors leave the state untouched, "invalid" is not retried forever |
 | `test/content-log.test.js` | loads `content.js` for real and drives a full tick: a successful send lands in the log with its card data, a timestamp for the quota, the duplicate guard holds, backfill runs once |
 | `test/resilience.test.js` | behaviour after an extension reload (badge notice, timer torn down, `getStatus` reports it) + a runtime cap on the backfill |
+| `test/guard.test.js` | seen-list (`addSeen`/`seenIds`, cap), "pending" texts in 7 languages, `isSearchPage`, version comparison, release-payload validation, daily rhythm of the update check, `lcSeen` in the backup |
+| `test/content-guard.test.js` | loads `content.js` for real: `lcSeen` is written/read/seeded once and cleared with Clear Log, click success in ES/IT/FR/PT/NL, circuit breaker after 5 failures (not the whole page), a success resets the streak, badge only on search pages or during a run |
 | `test/background.test.js` | loads `background.js` for real: sync on message, debounced auto-sync, never two runs at once, `lcLog` is never touched |
 | `test/popup-export.test.js` | loads `popup.html` + `popup.js` for real: export download, cancel behaviour, two-step clear |
 | `test/popup-stats.test.js` | loads `popup.html` + `popup.js` for real: quota display, chart + period selection, HTML report, backup/restore round-trip, unreachable tab, ops row, footer links |
@@ -460,6 +466,9 @@ triggers `.github/workflows/release.yml`: tests → ZIP → GitHub Release. The 
 | Badge `✅ Active - no buttons` | No unprocessed "Connect" buttons on the page — all sent, skipped (already in the log) or LinkedIn shows "Follow" instead of "Connect" | Scroll on / next page |
 | Badge `❌ Rate-Limit! 60s pause...` | LinkedIn answered HTTP 429 | Do nothing — it resumes after 60 s |
 | Badge `❌ No CSRF Token!` | No `JSESSIONID` cookie — not logged in or cookies blocked | Log in to LinkedIn |
+| Badge `⚠️ Stopped: 5 failures in a row`, popup "Stopped" | Five cards in a row rejected by LinkedIn — usually the weekly limit; the reply is under options page → Diagnostics | Wait (quota), then switch on again |
+| No 🕸️ badge visible | You are not on a search result page and no run is active | Intended — it appears on a `/search/results/…` page |
+| Popup footer shows `→ x.y.z ↗` | A newer version is published on GitHub (update check on the options page) | Open the link, download the ZIP, reload the extension |
 | Contacts are skipped although never asked | The profiles are in the log (`lcLog`) — duplicate guard | Intended. If needed, **Clear Log** (lifts the guard for everyone) |
 | "Requests sent" much larger than "Saved contacts" | The counter runs since the first install, the log only since 2.8.0 | Not a bug; chart and quota only reach back to when the log was created |
 | Chart shows a single column | The history is younger than the selected period | Pick a shorter period or wait |
@@ -471,6 +480,17 @@ triggers `.github/workflows/release.yml`: tests → ZIP → GitHub Release. The 
 | Update does not arrive | Old extension version cached | `chrome://extensions` → Update, reload the tab; check the version in the popup footer |
 
 ## Changelog
+
+### 2.11.0 — Durable duplicate guard, circuit breaker, update notice
+
+- **The duplicate guard no longer forgets**: it used to be fed from the log alone, which rotates at 5,000 rows — at 200 requests a week people became askable again after ~25 weeks. New `lcSeen`, a bare ID list (100,000 entries ≈ 2 MB), seeded once from the log on first start; Clear Log clears it too (the documented "lifts the guard" contract stands)
+- **Circuit breaker**: five rejected cards in a row (API **and** click) halt the run — before, it crawled through the whole page at 3 × 6 s per card once LinkedIn's weekly limit was hit. LinkedIn's exact reply is not known; the guard keys on the symptom, not on a guessed message. The last rejection is kept for diagnosis under options page → Diagnostics
+- **"Pending" detection in all seven languages** (only DE/EN before — on ES/IT/FR/PT/NL a successful click without a dialog counted as a failure)
+- **Badge only on search result pages or during a run** — no more 🕸️ in the feed, on profiles, in messaging; follows in-app navigation
+- **Update notice, opt-in**: "Check for updates" on the options page asks Chrome once for access to `api.github.com` (never on install, never silently), then at most daily; the popup footer shows a newer version as a link. Sideloaded installs finally learn about new versions — missing since 2.7.0–2.7.4
+- Two hints at zero height cost: "since 1.9." next to the chart when the history is younger than the period; tooltips explain "Requests sent" (since install) vs. "Saved contacts" (since 2.8.0)
+- Popup still under Chrome's 600px cap (worst case measured 597px); halt and chart lines are single-line, full text in the tooltip
+- Suite 392 → 439; 15 mutation probes, all caught
 
 ### 2.10.1 — Documentation, tests, manifest hardening
 
@@ -584,7 +604,8 @@ only cure, so that is what it says now.
 - The ON/OFF state survives a reload of the LinkedIn page
 - Processed profiles are tracked in an in-memory set (survives LinkedIn's DOM replacement) and seeded from the log (survives reloads)
 - Modals are skipped automatically (no sending for buttons inside dialogs)
-- The extension does **not** stop itself at the weekly quota — the display informs, the decision stays with the user
+- The extension does **not** stop itself at the weekly quota — the display informs, the decision stays with the user. It does stop after **five rejected cards in a row** (API and click) instead of crawling through the page at 18 s per card — usually LinkedIn's weekly limit. Switching on starts afresh
+- The badge only appears on search result pages or while a run is active — invisible in the feed, on profiles, in messaging
 - What the extension cannot know: whether a request was **accepted**. It only sees the send
 
 ## Legal

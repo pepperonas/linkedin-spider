@@ -7,14 +7,21 @@ globalThis.importScripts = () => {};
 
 let storage, messageListeners, changeListeners, fetchCalls, fetchImpl;
 
+let permissions;
+
 function setupChrome() {
   storage = {};
   messageListeners = [];
   changeListeners = [];
+  permissions = { granted: new Set() };
   globalThis.chrome = {
     runtime: {
       lastError: null,
+      getManifest: () => ({ version: '2.11.0' }),
       onMessage: { addListener(fn) { messageListeners.push(fn); } }
+    },
+    permissions: {
+      contains(q, cb) { cb(q.origins.every((o) => permissions.granted.has(o))); }
     },
     storage: {
       local: {
@@ -181,5 +188,80 @@ describe('background worker: ops sync', () => {
     await vi.advanceTimersByTimeAsync(10);
     // the queued rerun found nothing pending, so no second request was needed
     expect(fetchCalls.length).toBe(1);
+  });
+});
+
+describe('background worker: update check (opt-in)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    setupChrome();
+    fetchCalls = [];
+    fetchImpl = async (url) => { fetchCalls.push({ url }); return { ok: true, status: 200, json: async () => ({ tag_name: 'v2.12.0', html_url: 'https://github.com/pepperonas/linkedin-spider/releases/tag/v2.12.0' }) }; };
+    globalThis.fetch = vi.fn((...a) => fetchImpl(...a));
+  });
+  afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+
+  it('does not touch the network without the api.github.com permission', async () => {
+    const handle = await loadWorker();
+    const resp = await send(handle, { action: 'checkUpdate' });
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(resp.ok).toBe(false);
+    expect(resp.reason).toBe('permission');
+    expect(storage.lcUpdate).toBeUndefined();
+  });
+
+  it('asks GitHub once permission is there and records what it learned', async () => {
+    permissions.granted.add('https://api.github.com/*');
+    const handle = await loadWorker();
+    const resp = await send(handle, { action: 'checkUpdate' });
+    expect(fetchCalls[0].url).toBe('https://api.github.com/repos/pepperonas/linkedin-spider/releases/latest');
+    expect(resp.ok).toBe(true);
+    expect(resp.latest).toBe('2.12.0');
+    expect(resp.available).toBe(true);
+    expect(storage.lcUpdate.latest).toBe('2.12.0');
+    expect(storage.lcUpdate.url).toMatch(/releases\/tag\/v2\.12\.0$/);
+    expect(storage.lcUpdate.available).toBe(true);
+    expect(typeof storage.lcUpdate.checkedAt).toBe('number');
+  });
+
+  it('says "up to date" when the latest release is the installed one', async () => {
+    permissions.granted.add('https://api.github.com/*');
+    fetchImpl = async () => ({ ok: true, status: 200, json: async () => ({ tag_name: 'v2.11.0', html_url: 'https://github.com/pepperonas/linkedin-spider/releases/tag/v2.11.0' }) });
+    const handle = await loadWorker();
+    const resp = await send(handle, { action: 'checkUpdate' });
+    expect(resp.available).toBe(false);
+    expect(storage.lcUpdate.available).toBe(false);
+  });
+
+  it('asks at most once a day unless forced', async () => {
+    permissions.granted.add('https://api.github.com/*');
+    storage.lcUpdate = { checkedAt: Date.now() - 60_000, latest: '2.11.0', available: false, url: 'https://github.com/pepperonas/linkedin-spider/releases' };
+    const handle = await loadWorker();
+    const cached = await send(handle, { action: 'checkUpdate' });
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(cached.ok).toBe(true);
+    expect(cached.cached).toBe(true);
+    await send(handle, { action: 'checkUpdate', force: true });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the old answer and reports the problem when GitHub is unreachable', async () => {
+    permissions.granted.add('https://api.github.com/*');
+    fetchImpl = async () => { throw new TypeError('Failed to fetch'); };
+    storage.lcUpdate = { checkedAt: 0, latest: '2.11.0', available: false, url: 'x' };
+    const handle = await loadWorker();
+    const resp = await send(handle, { action: 'checkUpdate' });
+    expect(resp.ok).toBe(false);
+    expect(resp.error).toMatch(/Failed to fetch/);
+    expect(storage.lcUpdate.latest).toBe('2.11.0');   // untouched
+  });
+
+  it('ignores a malformed or off-site payload', async () => {
+    permissions.granted.add('https://api.github.com/*');
+    fetchImpl = async () => ({ ok: true, status: 200, json: async () => ({ tag_name: 'v9.9.9', html_url: 'https://evil.example/download' }) });
+    const handle = await loadWorker();
+    const resp = await send(handle, { action: 'checkUpdate' });
+    expect(resp.ok).toBe(false);
+    expect(storage.lcUpdate).toBeUndefined();
   });
 });

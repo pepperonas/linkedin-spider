@@ -59,7 +59,8 @@ gehoeren vom Nutzer freigegeben, nicht stillschweigend eingebaut.
 - **A3.1 erledigt** — `test/interceptor.test.js`: Paritätstest der Invite-Heuristik + echtes Laden der Datei (20 Tests).
 - **A3.3 erledigt** — Actions auf `checkout@v5`/`setup-node@v5`.
 - Neu dazu: `minimum_chrome_version: 102`, Doku-Wächter (`test/docs.test.js`), gemessene Badge-Zahl (`scripts/badges.mjs`).
-- Offen: A1.1–A1.5, A2, A3.2, A3.4, A4, A5.
+- **v2.11.0 erledigt:** A1.1 (pragmatisch: Notstopp nach 5 Fehlschlägen + letzte Ablehnung zur Diagnose — das echte Antwortformat bleibt zu messen), A1.3, A1.4, A1.5 (konservativ: nur Badge-Sichtbarkeit, Verhalten unverändert), A4.1 (opt-in), A5.1, A5.2.
+- Offen: A1.1 endgültig (LinkedIns Limit-Antwort erkennen, sobald `lcLastApiError` sie einmal geliefert hat), A1.2, A2 (Freigabe), A3.2, A3.4, A4.2, B Weg 3.
 
 ### Empfohlene Reihenfolge fuer Teil A
 

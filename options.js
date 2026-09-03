@@ -11,6 +11,9 @@ const stPending = document.getElementById('st-pending');
 const stInvalid = document.getElementById('st-invalid');
 const stLast = document.getElementById('st-last');
 const versionEl = document.getElementById('version');
+const updateBtn = document.getElementById('ops-update');
+const updateResult = document.getElementById('update-result');
+const stApiError = document.getElementById('st-apierror');
 
 const VERSION = (chrome.runtime && chrome.runtime.getManifest) ? (chrome.runtime.getManifest().version || '') : '';
 if (versionEl) versionEl.textContent = VERSION ? 'v' + VERSION : '';
@@ -60,8 +63,36 @@ async function ensureHostPermission(baseUrl) {
   return new Promise((r) => chrome.permissions.request({ origins }, (granted) => r(!!granted)));
 }
 
+function renderUpdate(info) {
+  if (!info) { updateResult.textContent = ''; return; }
+  updateResult.innerHTML = '';
+  if (!info.ok) {
+    updateResult.textContent = info.error || (info.reason === 'permission' ? 'Not checked yet — press the button to allow api.github.com.' : 'Check failed.');
+    updateResult.className = 'opt-help' + (info.error ? ' error' : '');
+    return;
+  }
+  updateResult.className = 'opt-help';
+  if (info.available) {
+    updateResult.append('Version ' + info.latest + ' is available (installed: ' + info.installed + ') — ');
+    const a = document.createElement('a');
+    a.href = info.url; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = 'open the release';
+    updateResult.appendChild(a);
+  } else {
+    updateResult.textContent = 'Up to date (' + info.installed + ').' + (info.cached ? ' Checked earlier today.' : '');
+  }
+}
+
+function renderApiError(e) {
+  if (!e || typeof e !== 'object' || !e.at) { stApiError.textContent = 'No API error recorded.'; return; }
+  stApiError.textContent = 'Last API error ' + LC.formatTimestamp(new Date(e.at).toISOString()) +
+    ' — HTTP ' + e.status + ': ' + (e.body || '(empty body)');
+}
+
 async function renderStatus() {
-  const { lcOps, lcLog, lcOpsState, lcOpsLast } = await storageGet(['lcOps', 'lcLog', 'lcOpsState', 'lcOpsLast']);
+  const { lcOps, lcLog, lcOpsState, lcOpsLast, lcUpdate, lcLastApiError } =
+    await storageGet(['lcOps', 'lcLog', 'lcOpsState', 'lcOpsLast', 'lcUpdate', 'lcLastApiError']);
+  renderApiError(lcLastApiError);
+  if (lcUpdate && !updateResult.textContent) renderUpdate(Object.assign({ ok: true, cached: true }, lcUpdate));
   const state = lcOpsState || {};
   const log = Array.isArray(lcLog) ? lcLog : [];
   let synced = 0, invalid = 0;
@@ -135,6 +166,27 @@ syncBtn.addEventListener('click', async () => {
     say(resp.error || 'Sync failed.', true);
   }
   await renderStatus();
+});
+
+// The permission is requested INSIDE the click (user gesture) — never on
+// install, never silently.
+updateBtn.addEventListener('click', async () => {
+  const origin = LC.UPDATE_ORIGIN;
+  let granted = true;
+  if (chrome.permissions && chrome.permissions.contains) {
+    granted = await new Promise((r) => chrome.permissions.contains({ origins: [origin] }, r));
+    if (!granted) granted = await new Promise((r) => chrome.permissions.request({ origins: [origin] }, (g) => r(!!g)));
+  }
+  if (!granted) {
+    updateResult.textContent = 'Chrome did not grant access to api.github.com — nothing checked.';
+    updateResult.className = 'opt-help error';
+    return;
+  }
+  updateResult.textContent = 'Checking…';
+  updateResult.className = 'opt-help';
+  const resp = await askWorker({ action: 'checkUpdate', force: true });
+  if (!resp) { updateResult.textContent = 'The extension worker did not answer — reload the extension.'; updateResult.className = 'opt-help error'; return; }
+  renderUpdate(resp);
 });
 
 forgetBtn.addEventListener('click', async () => {

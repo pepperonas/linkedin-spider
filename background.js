@@ -16,7 +16,10 @@ importScripts('lib.js');
 
 (() => {
   const LOG = '[LC-bg]';
-  const { opsSyncRun, opsNormalizeUrl, opsValidToken, OPS_IMPORT_PATH } = self.LC;
+  const {
+    opsSyncRun, opsNormalizeUrl, opsValidToken, OPS_IMPORT_PATH,
+    UPDATE_API, UPDATE_ORIGIN, compareVersions, parseLatestRelease, updateCheckDue
+  } = self.LC;
 
   const AUTO_DEBOUNCE_MS = 3000;
   let running = null;      // promise of the run in flight
@@ -71,8 +74,53 @@ importScripts('lib.js');
     }
   }
 
+  // --- Update check (opt-in) ------------------------------------------------
+  // Sideloaded ZIPs never update themselves. GitHub's releases API is asked
+  // only if the user granted api.github.com (the options page requests it on
+  // a click), at most once a day unless forced, and a bad or off-site payload
+  // is ignored rather than trusted.
+  function hasPermission(origin) {
+    return new Promise((resolve) => {
+      if (!chrome.permissions || !chrome.permissions.contains) return resolve(false);
+      chrome.permissions.contains({ origins: [origin] }, (ok) => resolve(!!ok));
+    });
+  }
+
+  async function checkUpdate(force) {
+    const installed = (chrome.runtime.getManifest && chrome.runtime.getManifest().version) || '0.0.0';
+    const { lcUpdate } = await get(['lcUpdate']);
+    if (!(await hasPermission(UPDATE_ORIGIN))) {
+      return { ok: false, reason: 'permission', installed, latest: lcUpdate ? lcUpdate.latest : null };
+    }
+    const now = Date.now();
+    if (!force && lcUpdate && !updateCheckDue(lcUpdate, now)) {
+      return Object.assign({ ok: true, cached: true, installed }, lcUpdate);
+    }
+    try {
+      const resp = await fetch(UPDATE_API, { headers: { Accept: 'application/vnd.github+json' } });
+      if (!resp.ok) return { ok: false, error: 'GitHub answered ' + resp.status, installed };
+      const latest = parseLatestRelease(await resp.json());
+      if (!latest) return { ok: false, error: 'Unexpected release payload', installed };
+      const info = {
+        checkedAt: now,
+        installed,
+        latest: latest.version,
+        url: latest.url,
+        available: compareVersions(latest.version, installed) > 0
+      };
+      await set({ lcUpdate: info });
+      return Object.assign({ ok: true, cached: false }, info);
+    } catch (e) {
+      return { ok: false, error: 'GitHub unreachable: ' + (e && e.message ? e.message : String(e)), installed };
+    }
+  }
+
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (!msg || typeof msg !== 'object') return false;
+    if (msg.action === 'checkUpdate') {
+      checkUpdate(!!msg.force).then(sendResponse);
+      return true;
+    }
     if (msg.action === 'opsSync') {
       runSync('manual').then(sendResponse);
       return true; // async response

@@ -79,6 +79,9 @@ input:checked + .slider::before {
 
 .status {
   text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 13px;
   padding: 6px;
   border-radius: 4px;
@@ -193,7 +196,16 @@ input:checked + .slider::before {
   gap: 8px;
 }
 
+.panel-head .sub {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .panel-title {
+  flex: 0 0 auto;
+  white-space: nowrap;
   font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
@@ -298,8 +310,8 @@ input:checked + .slider::before {
 
 /* --- Footer --------------------------------------------------------------- */
 .footer {
-  margin-top: 4px;
-  padding-top: 5px;
+  margin-top: 3px;
+  padding-top: 3px;
   border-top: 1px solid #e6e9ec;
   display: flex;
   align-items: center;
@@ -373,7 +385,7 @@ input:checked + .slider::before {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 6px;
+  margin-bottom: 5px;
   padding: 3px 8px;
   border: 1px solid #e6e9ec;
   border-radius: 8px;

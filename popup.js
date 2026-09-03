@@ -41,11 +41,36 @@ let opsBusy = false;
 
 const VERSION = (chrome.runtime && chrome.runtime.getManifest)
   ? (chrome.runtime.getManifest().version || '') : '';
-if (versionEl) versionEl.textContent = VERSION ? 'v' + VERSION : '';
+let halted = null;         // circuit-breaker reason reported by the tab
+
+// Footer: plain version, or a link to the newer release once one is known
+// (the check itself is opt-in on the options page).
+function renderVersion(update) {
+  if (!versionEl) return;
+  versionEl.textContent = VERSION ? 'v' + VERSION : '';
+  if (update && update.available && update.url && LC.compareVersions(update.latest, VERSION) > 0) {
+    versionEl.append(' → ');
+    const a = document.createElement('a');
+    a.href = update.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+    a.textContent = update.latest + ' ↗';
+    a.title = 'A newer release is available';
+    versionEl.appendChild(a);
+  }
+}
+renderVersion(null);
 
 const RELOAD_HINT = 'Reload the LinkedIn tab';
 
 function updateUI() {
+  if (tabReachable && halted) {
+    // The tab stopped itself after too many failures in a row.
+    // One line: the short form here, the full reason on hover.
+    status.textContent = '⚠️ Stopped: ' + String(halted).replace(/\s*\(.*\)\s*$/, '');
+    status.title = halted;
+    status.className = 'status warn';
+    toggle.checked = false;
+    return;
+  }
   if (!tabReachable) {
     // Either this is not a LinkedIn page, or the extension was reloaded and the
     // page was not — the old content script is orphaned and receives nothing.
@@ -118,7 +143,13 @@ function renderStats() {
 
   const buckets = LC.bucketEvents(events, range, now);
   const total = buckets.reduce((a, b) => a + b.count, 0);
-  rangeTotal.textContent = total + ' in ' + LC.rangeByKey(range).label;
+  // Younger history than the period? Say where it starts, so six empty
+  // columns read as "no data yet", not as "nothing happened".
+  const first = events.length ? events[0] : null;
+  const d = first ? new Date(first) : null;
+  const since = (d && buckets.length && first > buckets[0].start) ? ' · since ' + d.getDate() + '.' + (d.getMonth() + 1) + '.' : '';
+  rangeTotal.title = since ? 'History starts ' + LC.formatDay(first) + ' (contact log since v2.8.0)' : '';
+  rangeTotal.textContent = total + ' in ' + LC.rangeByKey(range).label + since;
 
   // The status poll runs once a second. Re-writing the SVG on every tick would
   // kill hover tooltips mid-hover, so it is only redrawn when the series or the
@@ -142,7 +173,8 @@ function renderLog() {
 }
 
 function loadState() {
-  chrome.storage.local.get(['lcLog', 'lcEvents', 'lcRange', 'lcOps', 'lcOpsState', 'lcOpsLast'], (result) => {
+  chrome.storage.local.get(['lcLog', 'lcEvents', 'lcRange', 'lcOps', 'lcOpsState', 'lcOpsLast', 'lcUpdate'], (result) => {
+    renderVersion(result.lcUpdate);
     log = Array.isArray(result.lcLog) ? result.lcLog : [];
     events = LC.normalizeEvents(result.lcEvents);
     range = LC.rangeByKey(result.lcRange).key;
@@ -414,6 +446,7 @@ async function refreshStatus() {
     misses = 0;
     tabReachable = true;
     enabled = resp.active;
+    halted = resp.halted || null;
     counter.textContent = resp.count;
     if (healed) healed.textContent = resp.healed ? 'self-healed ✓' : 'default';
   } else {

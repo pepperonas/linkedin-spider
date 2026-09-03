@@ -4,7 +4,8 @@
     getCsrfToken, getProfileId, getVanityFromCard, findNextConnect, findConfirmButton,
     realClick, buildInviteRequest, isUsableRecipe, DEFAULT_INVITE_RECIPE, MAX_CLICK_FAILS,
     extractCardInfo, buildRecord, appendRecord, profileIdsFromLog, LOG_CAP,
-    appendEvent, backfillEvents, weekQuota
+    appendEvent, backfillEvents, weekQuota,
+    addSeen, seenIds, isPendingText, isSearchPage, MAX_CONSECUTIVE_FAILS
   } = window.LC;
   let active = false;
   let intervalId = null;
@@ -14,6 +15,8 @@
   let learnedRecipe = null; // self-healed invite recipe captured from a live request
   let stuckDialogTicks = 0; // consecutive ticks a confirm dialog refused to close
   let contextGone = false;  // the extension was reloaded out from under this page
+  let consecutiveFails = 0; // cards that failed API AND click, in a row
+  let halted = null;        // reason string once the circuit breaker tripped
   const processedProfiles = new Set();
   const vanityCache = new Map(); // vanity name -> resolved fsd_profile ID (or null)
 
@@ -48,9 +51,16 @@
   let badgeColor = '#333';
   let quotaSuffix = '';
 
+  // The badge belongs on search result pages and wherever a run is active.
+  // On the feed, on profiles, in messaging it stays out of the way.
+  function badgeWanted() {
+    return active || contextGone || !!halted || isSearchPage(location.pathname);
+  }
+
   function renderBadge() {
     badge.textContent = '🕸️ ' + badgeText + (quotaSuffix ? ' · ' + quotaSuffix : '');
     badge.style.background = badgeColor;
+    badge.style.display = badgeWanted() ? '' : 'none';
   }
 
   function updateBadge(text, color) {
@@ -62,6 +72,18 @@
     badgeColor = color || '#333';
     renderBadge();
   }
+
+  // LinkedIn is a single-page app: the URL changes without a page load. While
+  // no run is active nothing else looks at it, so a cheap watcher re-evaluates
+  // the badge whenever the path moved (one comparison per 1.5 s, DOM touched
+  // only on change).
+  let lastPath = location.pathname;
+  setInterval(() => {
+    if (location.pathname !== lastPath) {
+      lastPath = location.pathname;
+      renderBadge();
+    }
+  }, 1500);
 
   function setQuotaFromEvents(events) {
     const q = weekQuota(events, Date.now());
@@ -284,6 +306,9 @@
       const text = await resp.text().catch(() => '');
       console.log(LOG, 'Invitation failed:', resp.status, text.substring(0, 200));
       if (resp.status === 429) return 'rate_limited';
+      // Kept for diagnosis: LinkedIn's weekly-limit response is not documented,
+      // and the options page shows this so the next version can recognize it.
+      storageSet({ lcLastApiError: { at: Date.now(), status: resp.status, body: text.substring(0, 300), url: req.url } });
       return 'error';
     } catch (err) {
       console.log(LOG, 'Invitation error:', err.message);
@@ -384,17 +409,16 @@
 
       // Check if button changed to "Ausstehend"/"Pending" (= success without dialog)
       const newText = connectLink.textContent.trim();
-      if (newText.includes('Ausstehend') || newText.includes('Pending')) {
-        console.log(LOG, 'Button changed to "Ausstehend" — invitation sent!');
+      if (isPendingText(newText)) {
+        console.log(LOG, 'Button changed to "pending" — invitation sent!');
         return true;
       }
 
       // Also check if parent container now shows "Ausstehend"
       const parent = connectLink.closest('[data-view-name="edge-creation-connect-action"]');
       if (parent) {
-        const parentText = parent.textContent.trim();
-        if (parentText.includes('Ausstehend') || parentText.includes('Pending')) {
-          console.log(LOG, 'Container changed to "Ausstehend" — invitation sent!');
+        if (isPendingText(parent.textContent)) {
+          console.log(LOG, 'Container changed to "pending" — invitation sent!');
           return true;
         }
       }
@@ -423,20 +447,33 @@
       pageUrl: location.href
     });
     const when = Date.parse(record.ts);
-    storageGet(['lcLog', 'lcEvents'], (res) => {
+    storageGet(['lcLog', 'lcEvents', 'lcSeen'], (res) => {
       const events = appendEvent(res.lcEvents, when);
       storageSet({
         lcLog: appendRecord(res.lcLog, record, LOG_CAP),
-        lcEvents: events
+        lcEvents: events,
+        // The durable guard: survives the log's FIFO cap.
+        lcSeen: profileId ? addSeen(res.lcSeen, profileId) : (res.lcSeen || [])
       });
       setQuotaFromEvents(events);
     });
     console.log(LOG, 'Logged contact:', record.name || '(no name)', record.profileUrl);
   }
 
+  // Too many failures in a row: stop instead of grinding through the page.
+  function haltRun(reason) {
+    halted = reason;
+    active = false;
+    if (intervalId) { clearInterval(intervalId); intervalId = null; }
+    storageSet({ lcHalt: { at: Date.now(), reason, fails: consecutiveFails } });
+    updateBadge('⚠️ Stopped: ' + reason, '#c00');
+    console.log(LOG, 'Run halted —', reason);
+  }
+
   async function tick() {
     if (!active || pending) return;
     if (contextLost()) { giveUp('tick'); return; }
+    renderBadge(); // the page may have navigated since the last tick
 
     if (rateLimited) {
       updateBadge('❌ Rate-Limit! Waiting...', '#c00');
@@ -537,6 +574,16 @@
     pending = false;
 
     if (ok) {
+      consecutiveFails = 0;
+    } else {
+      consecutiveFails++;
+      if (consecutiveFails >= MAX_CONSECUTIVE_FAILS) {
+        haltRun(consecutiveFails + ' failures in a row (weekly limit reached?)');
+        return;
+      }
+    }
+
+    if (ok) {
       count++;
       storageSet({ lcCount: count });
       recordSuccess(cardInfo, profileId, method);
@@ -551,6 +598,11 @@
   function start() {
     if (intervalId) return;
     if (contextLost()) { giveUp('start'); return; }
+    if (halted) {
+      halted = null;
+      consecutiveFails = 0;
+      storageSet({ lcHalt: null });
+    }
     active = true;
     pending = false;
     rateLimited = false;
@@ -576,7 +628,7 @@
       if (msg.enabled) start(); else stop();
       sendResponse({ ok: true });
     } else if (msg.action === 'getStatus') {
-      sendResponse({ active, count, healed: !!learnedRecipe, contextGone });
+      sendResponse({ active, count, healed: !!learnedRecipe, contextGone, halted });
     } else if (msg.action === 'resetCount') {
       count = 0;
       storageSet({ lcCount: 0 });
@@ -584,13 +636,13 @@
     } else if (msg.action === 'reloadState') {
       // A restore rewrote storage under us — pull the new state into memory so
       // this tab doesn't keep running on the pre-restore counters.
-      storageGet(['lcCount', 'lcRecipe', 'lcLog', 'lcEvents'], applyStoredState);
+      storageGet(['lcCount', 'lcRecipe', 'lcLog', 'lcEvents', 'lcSeen'], applyStoredState);
       sendResponse({ ok: true });
     } else if (msg.action === 'clearLog') {
       // Also drop the in-memory guard, otherwise the popup would clear the log
       // while this tab silently keeps skipping the very people it just forgot.
       processedProfiles.clear();
-      storageSet({ lcLog: [] });
+      storageSet({ lcLog: [], lcSeen: [] });
       sendResponse({ ok: true });
     }
   });
@@ -601,8 +653,17 @@
       learnedRecipe = result.lcRecipe;
       console.log(LOG, 'Restored learned invite recipe from storage');
     }
-    // Cross-session duplicate guard: nobody already in the log gets asked twice.
-    const known = profileIdsFromLog(result.lcLog);
+    // Cross-session duplicate guard: the durable seen-list plus whatever the
+    // log still holds. Seeded from the log once (keyed on "undefined" — an
+    // empty list is the user's Clear Log and must stay empty).
+    let seen = result.lcSeen;
+    if (seen === undefined) {
+      seen = addSeen([], [...profileIdsFromLog(result.lcLog)]);
+      storageSet({ lcSeen: seen });
+      if (seen.length) console.log(LOG, 'Seeded the seen-list with', seen.length, 'profiles from the log');
+    }
+    const known = seenIds(seen);
+    for (const id of profileIdsFromLog(result.lcLog)) known.add(id);
     for (const id of known) processedProfiles.add(id);
     if (known.size) console.log(LOG, 'Skipping', known.size, 'already-contacted profiles');
 
@@ -618,5 +679,5 @@
     setQuotaFromEvents(events);
   }
 
-  storageGet(['lcCount', 'lcRecipe', 'lcLog', 'lcEvents'], applyStoredState);
+  storageGet(['lcCount', 'lcRecipe', 'lcLog', 'lcEvents', 'lcSeen'], applyStoredState);
 })();

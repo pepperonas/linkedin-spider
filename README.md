@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.10.1-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.11.0-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/github/v/release/pepperonas/linkedin-spider?style=flat-square&label=release" alt="Latest Release">
   <img src="https://img.shields.io/github/release-date/pepperonas/linkedin-spider?style=flat-square&label=released" alt="Release Date">
   <img src="https://img.shields.io/badge/manifest-v3-green?style=flat-square&logo=googlechrome&logoColor=white" alt="Manifest V3">
@@ -48,7 +48,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/tests-392_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-439_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
   <img src="https://img.shields.io/badge/tested_with-Vitest-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest">
   <img src="https://img.shields.io/badge/DOM-jsdom-15a2bb?style=flat-square" alt="jsdom">
   <img src="https://img.shields.io/badge/assertions-mutation--probed-success?style=flat-square" alt="Mutation-probed">
@@ -360,6 +360,10 @@ Alles liegt in `chrome.storage.local` — also im Chrome-Profil auf Ihrem Rechne
 | `lcOps` | ops-Adresse, API-Token, Auto-Sync-Schalter | Optionsseite |
 | `lcOpsState` | Je Kontakt: von ops bestätigt / ungültig / Fehler (getrennt von `lcLog`, damit Worker und Content-Script nie dieselbe Liste schreiben) | „Forget sync state" |
 | `lcOpsLast` | Zusammenfassung des letzten Sync-Laufs | „Forget sync state" |
+| `lcSeen` | Dauerhafte Merkliste der angefragten Profil-IDs (max. 100 000, ~20 Byte je Eintrag) — die Duplikatsperre über die FIFO-Grenze des Protokolls hinaus; beim ersten Start nach 2.11.0 einmalig aus dem Protokoll befüllt | Clear Log |
+| `lcHalt` | Grund und Zeitpunkt, wenn der Notstopp (5 Fehlschläge in Folge) den Lauf angehalten hat | erneutes Einschalten |
+| `lcLastApiError` | Letzte Ablehnung durch LinkedIn (Status, erste 300 Zeichen der Antwort) — zur Diagnose auf der Optionsseite | — |
+| `lcUpdate` | Ergebnis des letzten Update-Checks (nur nach Ihrem Klick, höchstens täglich) | — |
 
 ### Was den Browser verlässt
 
@@ -409,7 +413,7 @@ npx vitest run test/lib.test.js          # eine Datei
 npx vitest run -t "buildInviteRequest"    # ein Test
 ```
 
-**392 Unit- und Integrationstests** mit Vitest + jsdom (Zeitzone in `vitest.config.js` auf `Europe/Berlin` gepinnt — die Kontingent- und Chart-Rechnung ist kalenderlokal, und der Fehler, den naive Millisekunden-Arithmetik erzeugt, existiert nur dort, wo die Uhren wirklich springen):
+**439 Unit- und Integrationstests** mit Vitest + jsdom (Zeitzone in `vitest.config.js` auf `Europe/Berlin` gepinnt — die Kontingent- und Chart-Rechnung ist kalenderlokal, und der Fehler, den naive Millisekunden-Arithmetik erzeugt, existiert nur dort, wo die Uhren wirklich springen):
 
 | Datei | Prüft |
 |---|---|
@@ -422,6 +426,8 @@ npx vitest run -t "buildInviteRequest"    # ein Test
 | `test/ops-sync.test.js` | Sync-Kern (`opsSyncRun` mit injiziertem `fetch`): Bearer-Token, Stapel, Zuordnung per Antwort-Index, 401/Netzfehler lassen den Stand unberührt, „ungültig" wird nicht ewig wiederholt |
 | `test/content-log.test.js` | lädt `content.js` echt und fährt einen kompletten Tick: erfolgreicher Send landet mit Kartendaten im Protokoll, Zeitstempel für das Kontingent, Duplikatsperre greift, Backfill nur einmal |
 | `test/resilience.test.js` | Verhalten nach einem Extension-Reload (Badge-Hinweis, Timer abgeräumt, `getStatus` meldet es) + Laufzeit-Deckel für den Backfill |
+| `test/guard.test.js` | Merkliste (`addSeen`/`seenIds`, Deckel), „Ausstehend"-Texte in 7 Sprachen, `isSearchPage`, Versionsvergleich, Release-Payload-Prüfung, Tages-Rhythmus des Update-Checks, `lcSeen` im Backup |
+| `test/content-guard.test.js` | lädt `content.js` echt: `lcSeen` wird geschrieben/gelesen/einmalig befüllt und mit Clear Log geleert, Klick-Erfolg in ES/IT/FR/PT/NL, Notstopp nach 5 Fehlschlägen (nicht die ganze Seite), Erfolg setzt die Strähne zurück, Badge nur auf Suchseiten oder im Lauf |
 | `test/background.test.js` | lädt `background.js` echt: Sync auf Nachricht, Auto-Sync mit Entprellung, kein paralleler Lauf, `lcLog` wird nie angefasst |
 | `test/popup-export.test.js` | lädt `popup.html` + `popup.js` echt: Export-Download, Abbruch-Verhalten, Zwei-Schritt-Löschen |
 | `test/popup-stats.test.js` | lädt `popup.html` + `popup.js` echt: Kontingent-Anzeige, Chart + Zeitraumwahl, HTML-Report, Backup-/Restore-Roundtrip, unerreichbarer Tab, ops-Zeile, Footer-Links |
@@ -461,6 +467,9 @@ löst `.github/workflows/release.yml` aus: Tests → ZIP → GitHub Release. Die
 | Badge `✅ Active - no buttons` | Auf der Seite gibt es keine unbearbeiteten „Vernetzen"-Buttons — alle gesendet, übersprungen (schon im Protokoll) oder LinkedIn zeigt „Folgen" statt „Vernetzen" | Weiter scrollen / nächste Seite |
 | Badge `❌ Rate-Limit! 60s pause...` | LinkedIn antwortet mit HTTP 429 | Nichts tun — läuft nach 60 s weiter |
 | Badge `❌ No CSRF Token!` | Kein `JSESSIONID`-Cookie — nicht eingeloggt oder Cookies geblockt | Bei LinkedIn einloggen |
+| Badge `⚠️ Stopped: 5 failures in a row`, Popup „Stopped" | Fünf Karten hintereinander von LinkedIn abgelehnt — meist das Wochenlimit; die Antwort steht unter Optionsseite → Diagnostics | Warten (Kontingent), dann den Schalter erneut einschalten |
+| Kein 🕸️-Badge zu sehen | Sie sind nicht auf einer Suchergebnisseite und kein Lauf ist aktiv | Gewollt — auf einer `/search/results/…`-Seite erscheint es |
+| Popup-Footer zeigt `→ x.y.z ↗` | Eine neuere Version ist auf GitHub veröffentlicht (Update-Check auf der Optionsseite) | Link öffnen, ZIP laden, Extension neu laden |
 | Kontakte werden übersprungen, obwohl noch nie angefragt | Die Profile stehen im Protokoll (`lcLog`) — Duplikatsperre | Gewollt. Notfalls **Clear Log** (hebt die Sperre für alle auf) |
 | „Requests sent" viel größer als „Saved contacts" | Der Zähler läuft seit der Erstinstallation, das Protokoll erst seit 2.8.0 | Kein Fehler; Chart und Kontingent reichen nur bis zum Anlegen des Protokolls zurück |
 | Chart zeigt nur eine Säule | Die Historie ist jünger als der gewählte Zeitraum | Kürzeren Zeitraum wählen oder abwarten |
@@ -472,6 +481,17 @@ löst `.github/workflows/release.yml` aus: Tests → ZIP → GitHub Release. Die
 | Deploy/Update kommt nicht an | Alte Extension-Version aus dem Cache | `chrome://extensions` → Aktualisieren, Tab neu laden; Version im Popup-Footer prüfen |
 
 ## Changelog
+
+### 2.11.0 — Dauerhafte Duplikatsperre, Notstopp, Update-Hinweis
+
+- **Duplikatsperre vergisst nicht mehr**: bisher speiste sie sich nur aus dem Protokoll, das bei 5000 Einträgen rotiert — bei 200 Anfragen/Woche wurden Kontakte nach ~25 Wochen wieder anfragbar. Neu `lcSeen`, eine reine ID-Liste (100 000 Einträge ≈ 2 MB), beim ersten Start einmalig aus dem Protokoll befüllt; Clear Log leert sie mit (der dokumentierte Vertrag „hebt die Sperre auf" bleibt)
+- **Notstopp**: fünf abgelehnte Karten in Folge (API **und** Klick) halten den Lauf an — vorher kroch er mit 3 × 6 s je Karte durch die ganze Seite, wenn LinkedIns Wochenlimit erreicht war. Die genaue Antwort LinkedIns ist nicht bekannt; der Wächter hängt am Symptom, nicht an einem geratenen Text. Die letzte Ablehnung liegt zur Diagnose unter Optionsseite → Diagnostics
+- **„Ausstehend"-Erkennung in allen sieben Sprachen** (bisher nur DE/EN — auf ES/IT/FR/PT/NL zählte ein erfolgreicher Klick ohne Dialog als Fehlschlag)
+- **Badge nur noch auf Suchergebnisseiten oder im Lauf** — kein 🕸️ mehr im Feed, auf Profilen, in Nachrichten; folgt der In-App-Navigation
+- **Update-Hinweis, opt-in**: „Check for updates" auf der Optionsseite fragt Chrome einmal um Zugriff auf `api.github.com` (nie bei der Installation, nie still), danach höchstens täglich; der Popup-Footer zeigt eine neuere Version als Link. Sideload-Installationen erfahren so von neuen Versionen — nach 2.7.0–2.7.4 hatte das gefehlt
+- Zwei Hinweise ohne Höhenkosten: „since 1.9." neben dem Chart, wenn die Historie jünger ist als der Zeitraum; Tooltips erklären „Requests sent" (seit Installation) vs. „Saved contacts" (seit 2.8.0)
+- Popup weiter unter Chromes 600-px-Deckel (schlimmster Fall 597 px gemessen); Halt- und Chart-Zeile sind einzeilig, Volltext im Tooltip
+- Suite 392 → 439; 15 Mutationsproben, alle gefangen
 
 ### 2.10.1 — Dokumentation, Tests, Manifest-Härtung
 
@@ -588,7 +608,8 @@ einzige Abhilfe ist ein Reload der Seite; genau das steht jetzt da.
 - Bei Reload der LinkedIn-Seite bleibt der AN/AUS-Status erhalten
 - Bereits verarbeitete Profile werden per Set im Speicher getrackt (überlebt DOM-Ersetzung durch LinkedIn) und aus dem Protokoll vorbefüllt (überlebt Reloads)
 - Modals werden automatisch übersprungen (kein Versand bei Buttons in Dialogen)
-- Die Extension **stoppt nicht** von selbst am Wochenkontingent — die Anzeige informiert, die Entscheidung bleibt beim Nutzer
+- Die Extension **stoppt nicht** von selbst am Wochenkontingent — die Anzeige informiert, die Entscheidung bleibt beim Nutzer. Sie stoppt aber nach **fünf abgelehnten Karten in Folge** (API und Klick), statt 18 s pro Karte durch die Seite zu kriechen — in der Regel ist das LinkedIns Wochenlimit. Einschalten startet neu
+- Das Badge erscheint nur auf Suchergebnisseiten oder während eines Laufs — im Feed, auf Profilen, in Nachrichten bleibt es unsichtbar
 - Was die Extension nicht wissen kann: ob eine Anfrage **angenommen** wurde. Sie sieht nur den Versand
 
 ## Rechtliches

@@ -140,17 +140,17 @@ describe('popup: activity chart', () => {
     const svg = document.querySelector('#chart svg');
     expect(svg).not.toBeNull();
     expect(svg.querySelectorAll('rect.lc-bar').length).toBe(7);
-    expect(document.getElementById('range-total').textContent).toBe('3 in 7 d');
+    expect(document.getElementById('range-total').textContent).toMatch(/^3 in 7 d/);
   });
 
   it('switching the period redraws and remembers the choice', async () => {
     storage.lcEvents = [daysAgo(20)];
     await loadPopup();
-    expect(document.getElementById('range-total').textContent).toBe('0 in 7 d');
+    expect(document.getElementById('range-total').textContent).toMatch(/^0 in 7 d/);
 
     document.querySelector('.chip[data-range="30d"]').click();
     expect(storage.lcRange).toBe('30d');
-    expect(document.getElementById('range-total').textContent).toBe('1 in 30 d');
+    expect(document.getElementById('range-total').textContent).toMatch(/^1 in 30 d/);
     expect(document.querySelector('.chip[data-range="30d"]').classList.contains('active')).toBe(true);
     expect(document.querySelector('.chip[data-range="7d"]').classList.contains('active')).toBe(false);
     expect(document.querySelectorAll('#chart rect.lc-bar').length).toBe(30);
@@ -471,6 +471,55 @@ describe('popup: ops sync row', () => {
     await loadPopup();
     document.getElementById('ops-settings').click();
     expect(chrome.runtime.openOptionsPage).toHaveBeenCalled();
+  });
+});
+
+describe('popup: update notice + halt + hints', () => {
+  beforeEach(() => { vi.useFakeTimers(); mountPopup(); setupChrome(); readerText = null; globalThis.FileReader = SyncFileReader; });
+  afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+
+  it('turns the footer version into a link when a newer release is known', async () => {
+    storage.lcUpdate = { checkedAt: 1, installed: MANIFEST.version, latest: '9.9.9', available: true, url: 'https://github.com/pepperonas/linkedin-spider/releases/tag/v9.9.9' };
+    await loadPopup();
+    const v = document.getElementById('version');
+    expect(v.textContent).toMatch(/9\.9\.9/);
+    const a = v.querySelector('a');
+    expect(a.getAttribute('href')).toMatch(/v9\.9\.9$/);
+    expect(a.getAttribute('target')).toBe('_blank');
+  });
+
+  it('shows only the plain version when up to date or unknown', async () => {
+    storage.lcUpdate = { checkedAt: 1, installed: MANIFEST.version, latest: MANIFEST.version, available: false, url: 'x' };
+    await loadPopup();
+    expect(document.getElementById('version').textContent).toBe('v' + MANIFEST.version);
+    expect(document.getElementById('version').querySelector('a')).toBe(null);
+  });
+
+  it('shows the circuit-breaker halt instead of "Paused"', async () => {
+    chrome.tabs.sendMessage = (_id, msg, cb) => { sentMessages.push(msg); if (cb) cb(msg.action === 'getStatus'
+      ? { active: false, count: 7, healed: false, contextGone: false, halted: '5 failures in a row (weekly limit reached?)' } : { ok: true }); };
+    await loadPopup();
+    await vi.advanceTimersByTimeAsync(1100);
+    const st = document.getElementById('status');
+    expect(st.textContent).toMatch(/stopped/i);
+    expect(st.textContent).toMatch(/5 failures/);
+    expect(st.className).toMatch(/warn/);
+  });
+
+  it('tells where the history starts when it is younger than the period', async () => {
+    storage.lcEvents = [daysAgo(1), daysAgo(0)];
+    await loadPopup();
+    document.querySelector('.chip[data-range="30d"]').click();
+    expect(document.getElementById('range-total').textContent).toMatch(/since/);
+    storage.lcEvents = Array.from({ length: 40 }, (_, i) => daysAgo(i));
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(document.getElementById('range-total').textContent).not.toMatch(/since/);
+  });
+
+  it('explains the two figures on hover', async () => {
+    await loadPopup();
+    expect(document.getElementById('counter').closest('.stat').getAttribute('title')).toMatch(/install/i);
+    expect(document.getElementById('logged').closest('.stat').getAttribute('title')).toMatch(/2\.8\.0/);
   });
 });
 

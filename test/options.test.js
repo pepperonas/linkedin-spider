@@ -218,6 +218,58 @@ describe('options page: status + sync', () => {
   });
 });
 
+describe('options page: update check', () => {
+  beforeEach(() => { mountOptions(); setupChrome(); });
+
+  it('asks Chrome for api.github.com on the click, then the worker', async () => {
+    workerReply = (msg) => msg.action === 'checkUpdate'
+      ? { ok: true, installed: MANIFEST.version, latest: '9.9.9', available: true, url: 'https://github.com/pepperonas/linkedin-spider/releases/tag/v9.9.9' }
+      : { ok: true };
+    await loadOptions();
+    $('ops-update').click();
+    await flush();
+    expect(permissions.asked).toEqual([['https://api.github.com/*']]);
+    expect(workerMessages.some((m) => m.action === 'checkUpdate' && m.force === true)).toBe(true);
+    const el = $('update-result');
+    expect(el.textContent).toMatch(/9\.9\.9/);
+    expect(el.querySelector('a').getAttribute('href')).toMatch(/releases\/tag\/v9\.9\.9$/);
+    expect(el.querySelector('a').getAttribute('rel')).toContain('noopener');
+  });
+
+  it('says so when it is up to date', async () => {
+    workerReply = (msg) => msg.action === 'checkUpdate'
+      ? { ok: true, installed: MANIFEST.version, latest: MANIFEST.version, available: false, url: 'x' } : { ok: true };
+    await loadOptions();
+    $('ops-update').click();
+    await flush();
+    expect($('update-result').textContent).toMatch(/up to date/i);
+  });
+
+  it('does nothing further when the user declines the permission', async () => {
+    permissions.allow = false;
+    await loadOptions();
+    $('ops-update').click();
+    await flush();
+    expect(workerMessages.some((m) => m.action === 'checkUpdate')).toBe(false);
+    expect($('update-result').textContent).toMatch(/not grant/i);
+  });
+
+  it('shows the worker\'s error', async () => {
+    workerReply = (msg) => msg.action === 'checkUpdate' ? { ok: false, error: 'GitHub unreachable: Failed to fetch' } : { ok: true };
+    await loadOptions();
+    $('ops-update').click();
+    await flush();
+    expect($('update-result').textContent).toMatch(/unreachable/);
+  });
+
+  it('shows the last API error LinkedIn returned, for diagnosis', async () => {
+    storage.lcLastApiError = { at: Date.now(), status: 400, body: '{"message":"weekly limit"}', url: '/voyager/api/x' };
+    await loadOptions();
+    expect($('st-apierror').textContent).toMatch(/400/);
+    expect($('st-apierror').textContent).toMatch(/weekly limit/);
+  });
+});
+
 describe('options page contract', () => {
   it('loads lib.js before options.js', () => {
     expect(HTML.indexOf('src="lib.js"')).toBeGreaterThan(-1);

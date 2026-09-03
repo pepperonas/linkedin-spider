@@ -63,6 +63,29 @@
       </p>
     </section>
 
+    <section class="opt-card">
+      <h2>Updates</h2>
+      <p class="opt-help">
+        Sideloaded extensions do not update themselves. This asks GitHub for the latest release — <strong>only when
+        you press the button</strong>; Chrome will ask once for access to <code>api.github.com</code>. Afterwards the
+        check repeats at most once a day and the popup footer shows a newer version as a link.
+      </p>
+      <div class="opt-actions">
+        <button id="ops-update" class="reset-btn">Check for updates</button>
+      </div>
+      <p class="opt-help" id="update-result"></p>
+    </section>
+
+    <section class="opt-card">
+      <h2>Diagnostics</h2>
+      <p class="opt-help" id="st-apierror">No API error recorded.</p>
+      <p class="opt-help">
+        If LinkedIn rejects requests, the last rejection is kept here (status and the first 300 characters of the reply).
+        After five rejected cards in a row the run stops by itself instead of grinding through the page — usually the
+        weekly invitation limit. Paste this when reporting an issue.
+      </p>
+    </section>
+
     <footer class="footer">
       <div class="footer-version" id="version"></div>
       <div class="footer-links">
