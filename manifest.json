@@ -1,7 +1,8 @@
 {
   "manifest_version": 3,
   "name": "LinkedIn Spider",
-  "version": "2.10.0",
+  "version": "2.10.1",
+  "minimum_chrome_version": "102",
   "description": "Automatically send connection requests on LinkedIn search results",
   "permissions": [
     "activeTab",

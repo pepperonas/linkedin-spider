@@ -1,10 +1,12 @@
 {
   "private": true,
   "name": "linkedin-auto-connect",
-  "version": "2.10.0",
+  "version": "2.10.1",
   "scripts": {
     "test": "vitest run",
-    "test:ci": "vitest run --reporter=verbose"
+    "test:ci": "vitest run --reporter=verbose",
+    "badges": "node scripts/badges.mjs --write",
+    "badges:check": "node scripts/badges.mjs --check"
   },
   "devDependencies": {
     "vitest": "^3.0.0",

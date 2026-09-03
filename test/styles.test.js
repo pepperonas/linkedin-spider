@@ -56,6 +56,32 @@ describe('contrast of popup text on the white popup ground', () => {
   });
 });
 
+describe('contrast on the options page', () => {
+  const optionsCss = fs.readFileSync(path.resolve('options.css'), 'utf8');
+  // The page ground is #f3f6f8, the cards are white — check each role on its own ground.
+  it('help text and card headings meet 4.5:1 on the card', () => {
+    for (const sel of ['.opt-help', '.opt-card h2', '.opt-field span', '.opt-stats span']) {
+      const color = colorOf(optionsCss, sel);
+      expect(color, `no color for ${sel}`).not.toBeNull();
+      expect(contrast(color, WHITE)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+  it('the lead paragraph meets 4.5:1 on the page ground', () => {
+    const bg = optionsCss.match(/body\.options\s*\{[^}]*background:\s*(#[0-9a-fA-F]{3,6})/)[1];
+    expect(contrast(colorOf(optionsCss, '.options .lead'), bg)).toBeGreaterThanOrEqual(4.5);
+  });
+  it('the big figures meet 3:1', () => {
+    expect(contrast(colorOf(optionsCss, '.opt-stats b'), WHITE)).toBeGreaterThanOrEqual(3);
+  });
+  it('the popup chip and ops-status tones meet 4.5:1', () => {
+    for (const sel of ['.chip-btn', '.ops-status', '.ops-status.pending', '.ops-status.error', '.ops-status.ok']) {
+      const color = colorOf(css, sel);
+      expect(color, `no color for ${sel}`).not.toBeNull();
+      expect(contrast(color, WHITE)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+});
+
 describe('contrast inside the exported report', () => {
   // The report ships its own inline stylesheet — same floor applies there.
   // It lives inside JS string concatenation in lib.js — join the literals back

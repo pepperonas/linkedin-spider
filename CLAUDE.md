@@ -156,6 +156,21 @@ Sent requests become `RainmakerLead`s in ops (status `contacted`, source `linked
 
 ⚠️ **`appendEvent` sorts after appending.** The cap trims from the front, so an out-of-order write (two tabs, a skewed clock, a restored file) would otherwise evict the *newest* entry instead of the oldest. Found by a test, not in the field.
 
+## Documentation guards (v2.10.1)
+
+The READMEs are structured (TOC · At a glance · How it works · Features · Installation/Compatibility · Usage · Permissions and data · Architecture/Message protocol · Tests · Development/Release · Troubleshooting · Changelog · Notes · Legal · Security) and **DE and EN are mirrored**. `test/docs.test.js` enforces what a machine can check:
+
+- `<!-- toc -->…<!-- /toc -->` links ↔ `## ` headings (both directions); **no emoji in `##`/`###` headings** — GitHub's anchor for `🧬 Foo` is `-foo`, unguessable.
+- DE/EN: same number of `##` and `###`, same mermaid blocks, same local images, same version badge, same badge count (≥30).
+- Every `lc*` storage key found in the sources must sit in the **storage table** (`### Was gespeichert wird` / `### What is stored`), every manifest permission (incl. `optional_host_permissions`) in the **permissions table** — scoped to those sections, because a mention in the changelog is not an explanation (the first probe survived on exactly that).
+- `minimum_chrome_version` (manifest, `102` — `optional_host_permissions` needs it) must appear as "Chrome 102" and as the `Chrome-102%2B` badge; the quota badge must carry `WEEKLY_QUOTA`.
+- No store link/badge, no coverage badge — neither exists. Prose saying "no store listing" is fine and deliberately allowed.
+- No dead local links; every runtime file in the architecture table.
+
+**Badges are measured, not guessed.** `scripts/badges.mjs --check` reads vitest's JSON report and compares the total to the `tests-N_passing` badge in both READMEs (CI runs it after the suite; `--write`/`npm run badges` rewrites badge + prose). It refuses to write while the suite is red — a "passing" badge would lie.
+
+`test/interceptor.test.js` loads `interceptor.js` for real (stub `send` on `XMLHttpRequest.prototype` BEFORE arming, or jsdom hits the network) and pins the MAIN-world copy of the invite heuristic against `LC.isInviteRequest` with identical inputs — the "keep the two in sync" rule above finally has teeth. ⚠️ The POST-only rule needs a non-POST request WITH an invite body to be observable; with GET the missing body trips the URN guard first and the probe survives.
+
 ## Releasing
 
 `git tag vX.Y.Z && git push --tags` triggers `.github/workflows/release.yml`: tests → ZIP → GitHub Release.
@@ -164,13 +179,13 @@ Sent requests become `RainmakerLead`s in ops (status `contacted`, source `linked
 
 ## Versioning
 
-SemVer. The user-facing version lives in `manifest.json` (currently **2.10.0**) and is shown in the popup footer, read via `chrome.runtime.getManifest().version` — never hard-coded. `package.json` used to lag independently (it sat at 2.4.0 through five releases); since 2.9.0 the two must match and `test/version.test.js` pins that, along with the version badge in both READMEs and the presence of a `### <version>` changelog heading. Bump `manifest.json` + `package.json` + both README badges + both changelogs together.
+SemVer. The user-facing version lives in `manifest.json` (currently **2.10.1**) and is shown in the popup footer, read via `chrome.runtime.getManifest().version` — never hard-coded. `package.json` used to lag independently (it sat at 2.4.0 through five releases); since 2.9.0 the two must match and `test/version.test.js` pins that, along with the version badge in both READMEs and the presence of a `### <version>` changelog heading. Bump `manifest.json` + `package.json` + both README badges + both changelogs together.
 
 ## Testing conventions
 
 `test/lib.test.js` + `test/export.test.js` cover the pure/DOM helpers. `test/content-log.test.js` and `test/popup-export.test.js` load `content.js` and `popup.html`+`popup.js` **for real** in jsdom (chrome + `fetch` stubbed, fake timers) rather than re-implementing the logic — the older `test/content.test.js` / `test/popup.test.js` only simulate it, so a change there can pass while the shipped file is broken.
 
-`test/ops-sync.test.js` tests the sync core with `fetch` injected; `test/background.test.js` loads the real `background.js` (stub `importScripts`, `self` is `window` in jsdom); `test/options.test.js` loads `options.html` + `options.js`. `test/stats.test.js`, `test/backup.test.js`, `test/report.test.js`, `test/styles.test.js` and `test/version.test.js` are pure/file-level; `test/resilience.test.js` loads the real `content.js` against a stub whose `chrome.runtime.id` can be revoked mid-run — `styles.test.js` reads `styles.css`/`lib.js`/`popup.html` as text and asserts on them (contrast ratios, the button-row arrangement, and that every id `popup.js` calls `getElementById` for actually exists). ⚠️ The report's stylesheet lives inside JS string concatenation in `lib.js`; join the literals (`/'\s*\+\s*\n?\s*'/`) before reading rules out of it, or every rule but the first reads as missing. `test/popup-stats.test.js` loads `popup.html` + `popup.js` for real and stubs `FileReader` with a synchronous stand-in — the point is the popup's own wiring (change → read → parse → arm → confirm), not jsdom's reader.
+`test/interceptor.test.js` and `test/docs.test.js` are described under *Documentation guards* above. `test/ops-sync.test.js` tests the sync core with `fetch` injected; `test/background.test.js` loads the real `background.js` (stub `importScripts`, `self` is `window` in jsdom); `test/options.test.js` loads `options.html` + `options.js`. `test/stats.test.js`, `test/backup.test.js`, `test/report.test.js`, `test/styles.test.js` and `test/version.test.js` are pure/file-level; `test/resilience.test.js` loads the real `content.js` against a stub whose `chrome.runtime.id` can be revoked mid-run — `styles.test.js` reads `styles.css`/`lib.js`/`popup.html` as text and asserts on them (contrast ratios, the button-row arrangement, and that every id `popup.js` calls `getElementById` for actually exists). ⚠️ The report's stylesheet lives inside JS string concatenation in `lib.js`; join the literals (`/'\s*\+\s*\n?\s*'/`) before reading rules out of it, or every rule but the first reads as missing. `test/popup-stats.test.js` loads `popup.html` + `popup.js` for real and stubs `FileReader` with a synchronous stand-in — the point is the popup's own wiring (change → read → parse → arm → confirm), not jsdom's reader.
 
 ⚠️ **An outcome can be reached by more than one mechanism — probe for that.** Two 2.9.1 probes survived at first: removing `clearInterval` still stopped the sends (because `active = false` already gates `tick`), and removing the `try/catch` in `storageSet` still warned (because the test's synchronous storage stub let the *outer* `storageGet` try/catch swallow it). Both assertions were true for the wrong reason. Fixes: assert `vi.getTimerCount()` drops, and break storage only **after** startup so the failing call is the one under test.
 

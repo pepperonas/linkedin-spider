@@ -54,6 +54,13 @@ gehoeren vom Nutzer freigegeben, nicht stillschweigend eingebaut.
 | A5.1 | Chart bei 7 d nach einem Tag Nutzung: eine Saeule, sechs leer (Screenshot). Ein Hinweis „Verlauf beginnt mit 2.8.0" unter dem Chart, solange die Historie kuerzer als der Zeitraum ist, erklaert das Bild. | S |
 | A5.2 | `Requests sent` (1259) vs. `Saved contacts` (164) — inzwischen im README erklaert, im Popup nicht. Tooltip auf der Kachel. | S |
 
+### Stand 2026-09-03 (v2.10.1)
+
+- **A3.1 erledigt** — `test/interceptor.test.js`: Paritätstest der Invite-Heuristik + echtes Laden der Datei (20 Tests).
+- **A3.3 erledigt** — Actions auf `checkout@v5`/`setup-node@v5`.
+- Neu dazu: `minimum_chrome_version: 102`, Doku-Wächter (`test/docs.test.js`), gemessene Badge-Zahl (`scripts/badges.mjs`).
+- Offen: A1.1–A1.5, A2, A3.2, A3.4, A4, A5.
+
 ### Empfohlene Reihenfolge fuer Teil A
 
 1. **A1.1 Kontingent-Ende** — der einzige Punkt, der den Lauf real unbrauchbar machen kann; zuerst die echte LinkedIn-Antwort mitschneiden (der Interceptor kann sie loggen), dann bauen.

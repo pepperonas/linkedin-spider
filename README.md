@@ -11,21 +11,29 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.10.0-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.10.1-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/github/v/release/pepperonas/linkedin-spider?style=flat-square&label=release" alt="Latest Release">
+  <img src="https://img.shields.io/github/release-date/pepperonas/linkedin-spider?style=flat-square&label=released" alt="Release Date">
   <img src="https://img.shields.io/badge/manifest-v3-green?style=flat-square&logo=googlechrome&logoColor=white" alt="Manifest V3">
+  <img src="https://img.shields.io/badge/Chrome-102%2B-4285F4?style=flat-square&logo=googlechrome&logoColor=white" alt="Chrome 102+">
   <img src="https://img.shields.io/badge/world-MAIN_%2B_ISOLATED-8957e5?style=flat-square" alt="MAIN + ISOLATED world">
-  <img src="https://img.shields.io/badge/platform-Chrome-yellow?style=flat-square&logo=googlechrome&logoColor=white" alt="Chrome">
+  <img src="https://img.shields.io/badge/service_worker-MV3-8957e5?style=flat-square" alt="Service Worker">
   <img src="https://img.shields.io/badge/language-JavaScript-F7DF1E?style=flat-square&logo=javascript&logoColor=black" alt="JavaScript">
   <img src="https://img.shields.io/github/license/pepperonas/linkedin-spider?style=flat-square" alt="License">
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/github/actions/workflow/status/pepperonas/linkedin-spider/test.yml?branch=main&label=tests&style=flat-square&logo=github" alt="CI">
+  <img src="https://img.shields.io/github/actions/workflow/status/pepperonas/linkedin-spider/release.yml?label=release%20build&style=flat-square&logo=github" alt="Release Build">
   <img src="https://img.shields.io/github/last-commit/pepperonas/linkedin-spider?style=flat-square&color=purple" alt="Last Commit">
+  <img src="https://img.shields.io/github/commit-activity/m/pepperonas/linkedin-spider?style=flat-square" alt="Commit Activity">
   <img src="https://img.shields.io/github/repo-size/pepperonas/linkedin-spider?style=flat-square&color=orange" alt="Repo Size">
+  <img src="https://img.shields.io/github/downloads/pepperonas/linkedin-spider/total?style=flat-square&color=blue" alt="Downloads">
   <img src="https://img.shields.io/github/stars/pepperonas/linkedin-spider?style=flat-square" alt="Stars">
   <img src="https://img.shields.io/github/forks/pepperonas/linkedin-spider?style=flat-square" alt="Forks">
   <img src="https://img.shields.io/github/issues/pepperonas/linkedin-spider?style=flat-square" alt="Issues">
+  <img src="https://img.shields.io/github/issues-pr/pepperonas/linkedin-spider?style=flat-square" alt="Pull Requests">
+  <img src="https://img.shields.io/github/contributors/pepperonas/linkedin-spider?style=flat-square" alt="Contributors">
 </p>
 
 <p align="center">
@@ -33,84 +41,134 @@
   <img src="https://img.shields.io/badge/API-LinkedIn_Voyager-0A66C2?style=flat-square&logo=linkedin&logoColor=white" alt="LinkedIn Voyager API">
   <img src="https://img.shields.io/badge/auto--recovery-DOM_%2B_API-brightgreen?style=flat-square" alt="Auto Recovery">
   <img src="https://img.shields.io/badge/rate_limit-1.5s_interval-informational?style=flat-square" alt="Rate Limit">
+  <img src="https://img.shields.io/badge/Wochenkontingent-200-orange?style=flat-square" alt="Weekly quota 200">
   <img src="https://img.shields.io/badge/i18n-7_Sprachen-ff69b4?style=flat-square" alt="i18n">
+  <img src="https://img.shields.io/badge/celox_ops-Sync-0A66C2?style=flat-square" alt="celox ops sync">
+  <img src="https://img.shields.io/badge/Export-CSV_%C2%B7_HTML_%C2%B7_JSON-informational?style=flat-square" alt="Export formats">
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/tests-346_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-392_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
   <img src="https://img.shields.io/badge/tested_with-Vitest-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest">
   <img src="https://img.shields.io/badge/DOM-jsdom-15a2bb?style=flat-square" alt="jsdom">
+  <img src="https://img.shields.io/badge/assertions-mutation--probed-success?style=flat-square" alt="Mutation-probed">
+  <img src="https://img.shields.io/badge/Kontrast-WCAG_AA-success?style=flat-square" alt="WCAG AA contrast">
+  <img src="https://img.shields.io/badge/Telemetrie-keine-success?style=flat-square" alt="No telemetry">
   <img src="https://img.shields.io/badge/build-no_build_step-brightgreen?style=flat-square" alt="No Build Step">
   <img src="https://img.shields.io/badge/dependencies-zero_runtime-success?style=flat-square" alt="Zero Dependencies">
+  <img src="https://img.shields.io/badge/SemVer-2.0.0-blue?style=flat-square" alt="SemVer">
+  <img src="https://img.shields.io/maintenance/yes/2026?style=flat-square" alt="Maintained">
   <img src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square" alt="PRs Welcome">
 </p>
 
 <p align="center">
-  <a href="https://www.paypal.com/donate/?business=martinpaush@gmail.com&currency_code=EUR"><img src="https://img.shields.io/badge/Sponsor_this_project-PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate via PayPal"></a>
+  <a href="https://www.paypal.com/donate/?business=martin.pfeffer@celox.io&currency_code=EUR&item_name=LinkedIn%20Spider"><img src="https://img.shields.io/badge/Sponsor_this_project-PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate via PayPal"></a>
+  &nbsp;
+  <a href="https://g.page/r/CXgdRV3QysvxEBM/review"><img src="https://img.shields.io/badge/Bewerten-Google_Maps-4285F4?style=for-the-badge&logo=googlemaps&logoColor=white" alt="Rate on Google Maps"></a>
+  &nbsp;
+  <a href="https://celox.io"><img src="https://img.shields.io/badge/made_by-celox.io-black?style=for-the-badge" alt="celox.io"></a>
 </p>
 
 <p align="center">
-  Chrome Extension (Manifest V3) zum automatischen Versenden von Kontaktanfragen auf LinkedIn-Suchergebnisseiten — <b>mit selbstheilender Erkennung gegen LinkedIns DOM- und API-Änderungen</b>.
+  Chrome Extension (Manifest V3) zum automatischen Versenden von Kontaktanfragen auf LinkedIn-Suchergebnisseiten — <b>mit selbstheilender Erkennung gegen LinkedIns DOM- und API-Änderungen</b>, Wochenkontingent, Kontaktprotokoll, Exporten und Anbindung an <a href="https://ops.celox.io">celox ops</a>.
 </p>
+
+## Inhalt
+
+<!-- toc -->
+- [Auf einen Blick](#auf-einen-blick)
+- [Funktionsweise](#funktionsweise)
+- [Features](#features)
+- [Installation](#installation)
+- [Verwendung](#verwendung)
+- [Berechtigungen und Daten](#berechtigungen-und-daten)
+- [Architektur](#architektur)
+- [Tests](#tests)
+- [Entwicklung](#entwicklung)
+- [Problembehebung](#problembehebung)
+- [Changelog](#changelog)
+- [Hinweise](#hinweise)
+- [Rechtliches](#rechtliches)
+- [Sicherheit](#sicherheit)
+- [Entwickler](#entwickler)
+- [Lizenz](#lizenz)
+<!-- /toc -->
+
+## Auf einen Blick
+
+1. **[Neueste Version laden](https://github.com/pepperonas/linkedin-spider/releases/latest)**, entpacken, in `chrome://extensions` als entpackte Erweiterung laden (Entwicklermodus).
+2. LinkedIn-Personensuche öffnen, Extension-Icon anklicken, **Auto-Connect** einschalten.
+3. Das Badge unten rechts zeigt den Fortschritt — und immer den Stand des Wochenkontingents (`43/200 wk`).
+4. Kontakte als **CSV** exportieren oder direkt nach **celox ops** übertragen (Popup ⚙ → Token).
+
+> **Wichtig nach jedem Update:** Extension-Karte in `chrome://extensions` aktualisieren **und** den offenen LinkedIn-Tab neu laden. Seit 2.9.1 sagt es die Extension selbst (`⚠️ Reload this page`), wenn Sie das vergessen — vorher fiel sie lautlos aus.
 
 ## Funktionsweise
 
-Die Extension scannt LinkedIn-Suchergebnisse nach "Vernetzen"-Buttons und sendet Kontaktanfragen direkt über die LinkedIn Voyager API. Schlägt die API fehl (aber kein Rate-Limit), wird automatisch ein Click-Fallback verwendet — der zugleich LinkedIns echten Request auslöst, aus dem sich die Extension selbst neu kalibriert.
+Die Extension scannt LinkedIn-Suchergebnisse nach „Vernetzen"-Buttons und sendet Kontaktanfragen direkt über die LinkedIn Voyager API. Schlägt die API fehl (aber kein Rate-Limit), wird automatisch ein Click-Fallback verwendet — der zugleich LinkedIns echten Request auslöst, aus dem sich die Extension selbst neu kalibriert.
 
 **Technische Details:**
-- Mehrstufige, sprachunabhängige Button-Erkennung: `aria-label`-Muster, sichtbarer Text (6 Sprachen) **und** `href`-Heuristik (`search-custom-invite`), plus Legacy-`data-view-name`-Strategie
-- Robuste Profil-ID-Extraktion: `componentkey="SearchResults…"` **oder** jedes Attribut mit einer `urn:li:fsd_profile:`-ID
-- API-Aufruf an `/voyager/api/voyagerRelationshipsDashMemberRelationships`
-- Click-Fallback mit `realClick()` (volle Pointer-+Maus-Event-Sequenz) wenn die API fehlschlägt
-- Rate-Limiting: 1 Anfrage alle 1,5 Sekunden
-- Automatische 60s-Pause bei LinkedIn 429 Rate-Limit
-- CSRF-Token aus `JSESSIONID`-Cookie (bei jedem Request frisch eingesetzt)
-- Profil-ID-basiertes Tracking verhindert doppelte Verarbeitung nach DOM-Ersetzung
 
-## 🧬 Self-Healing (NEU in 2.7.0)
+- Direkte API-Calls an LinkedIns interne Voyager-API (`verifyQuotaAndCreateV2`) mit CSRF-Token aus dem Session-Cookie
+- 1,5-Sekunden-Intervall zwischen Anfragen (Rate-Limiting)
+- Automatische 60-Sekunden-Pause bei HTTP 429 (LinkedIn Rate-Limit)
+- Profil-Erkennung über `componentkey` / `data-chameleon-result-urn` (URN-basiert); ohne URN im DOM über den `/in/<vanity>`-Link der Karte plus Voyager-Lookup
+- Sprachunabhängige Erkennung von Connect-Buttons über `aria-label`, Text oder `href` (DE / EN / FR / IT / ES / NL / PT)
+- Bestätigungsdialog („Ohne Notiz/Nachricht senden") wird automatisch bedient, in beiden Wortlaut-Varianten
 
-LinkedIn ändert sein Frontend (CSS-Klassen, DOM-Struktur) und seine internen APIs ständig — der häufigste Grund, warum solche Tools über Nacht kaputtgehen. LinkedIn Spider wehrt sich auf **zwei Ebenen** dagegen:
+### Self-Healing
 
-1. **Robuste DOM-Erkennung** — überlebt umbenannte Hash-Klassen, umgebautes DOM und Sprachwechsel, weil sie über `aria-label`, Text *und* `href` erkennt statt über zerbrechliche CSS-Selektoren.
-2. **API-Auto-Capture** — ein Interceptor im MAIN-World der Seite (`interceptor.js`) belauscht LinkedIns eigenen Invite-Request und lernt dessen aktuelle Form ("Recipe": URL, Header, Body). Künftige Anfragen werden über dieses gelernte Recipe verschickt.
+LinkedIn ändert DOM und API häufig. Die Extension begegnet dem an zwei Fronten:
 
-**Die Selbstheilungs-Schleife:** Bricht der API-Pfad → greift der Klick-Fallback → LinkedIn feuert seinen eigenen Request → der Interceptor schneidet ihn mit → ab dann läuft der schnelle API-Weg automatisch wieder. Ein veraltetes Recipe wird bei Fehler verworfen und neu gelernt. Das gelernte Recipe wird in `chrome.storage` persistiert; das Popup zeigt den API-Modus (`default` bzw. `self-healed ✓`).
+1. **Heuristische DOM-Erkennung** — aria-label, Text und `href` statt fester CSS-Klassen. Fällt eine Signalquelle weg, tragen die anderen.
+2. **Lernender API-Interceptor** — `interceptor.js` läuft in der MAIN-World der Seite und schneidet LinkedIns *eigenen* Invite-Request mit (URL, Header, Body). Dieses „Recipe" wird gespeichert und für alle weiteren Anfragen wiederverwendet. Ändert LinkedIn den Endpunkt oder das Payload-Format, genügt **ein** echter Klick, und die Extension arbeitet wieder auf dem schnellen API-Weg.
 
-> **Grenze:** Die Extension kann keinen völlig unbekannten API-Vertrag erraten — sie braucht **einen** funktionierenden echten Klick, um neu zu lernen. Solange LinkedIns Klick-Pfad funktioniert (der bricht praktisch nie vollständig weg), heilt sich der API-Pfad daraus von selbst.
+```mermaid
+flowchart TD
+    A[Tick: Connect-Button gefunden] --> B{Profil-ID im DOM?}
+    B -- nein --> C[Vanity-Lookup über Voyager]
+    C --> B2{ID gefunden?}
+    B -- ja --> D[API-Send mit Recipe]
+    B2 -- ja --> D
+    B2 -- nein --> F
+    D --> E{Antwort}
+    E -- 200 --> G[protokollieren, Kontingent zählen, Button wird zum Bierglas]
+    E -- 429 --> H[60 s Pause, dann weiter]
+    E -- Fehler --> F[Click-Fallback: echter Klick + Dialog]
+    F --> I[LinkedIn sendet den Request selbst]
+    I --> J[interceptor.js schneidet ihn mit]
+    J --> K[Recipe gelernt — nächste Anfrage wieder per API]
+```
+
+Die Selbstheilungs-Schleife: Bricht der API-Pfad → greift der Klick-Fallback → LinkedIn feuert seinen eigenen Request → der Interceptor schneidet ihn mit → ab dann läuft der schnelle API-Weg automatisch wieder. Ein veraltetes Recipe wird bei Fehler verworfen und neu gelernt. Das gelernte Recipe wird in `chrome.storage` persistiert; das Popup zeigt den API-Modus (`default` bzw. `self-healed ✓`).
 
 ## Features
 
-- 🧬 **Self-Healing** gegen DOM- und API-Änderungen (siehe oben)
-- 🌐 **Mehrsprachig** — Erkennung in DE / EN / FR / IT / ES / NL / PT
-- AN/AUS-Schalter über Popup
-- Anfragen-Zähler (persistent in `chrome.storage`)
-- API-Modus-Anzeige im Popup (`default` / `self-healed ✓`)
-- Counter zurücksetzen
-- 📊 **Wochenkontingent im Popup** — 200 freie Kontaktanfragen pro Woche, verbraucht/verbleibend mit Fortschrittsbalken (plus rollierender 7-Tage-Wert); steht auch im Seiten-Badge
-- 📈 **Verlaufs-Chart** mit wählbarem Zeitraum (7 d / 30 d / 90 d / 1 Jahr) — im Popup und im HTML-Report
-- 💾 **Backup & Wiederherstellung** — alle Werte als JSON sichern und zurückspielen
-- 📇 **Kontaktprotokoll** — jede gesendete Anfrage wird dauerhaft gespeichert (Name, Datum, Profil-URL, Headline, Firma, Ort, Kontaktgrad, Profil-ID, Sendeweg, Suchseite)
-- ⬇ **CSV-Export** aus dem Popup — Excel-fertig (Semikolon + UTF-8-BOM), Dateiname mit Datumsstempel als Vorschlag
-- 📊 **HTML-Report-Export** — eigenständige Datei mit Chart, Kontingent und Kontakttabelle, ohne externe Assets
-- 🔖 **Versionsnummer + Links im Footer** des Popups (SemVer)
-- 🔗 **celox-ops-Anbindung** — gesendete Anfragen als Rainmaker-Leads (Status „angeschrieben"), per CSV-Import in ops oder als Push aus der Extension (Service-Worker, optional automatisch)
-- 🔁 **Duplikatsperre über Sessions** — wer einmal im Protokoll steht, wird nie erneut angefragt
-- Visuelles Status-Badge (unten rechts auf der Seite)
-- Erfolgreiche Vernetzungen werden mit 🍻-Emoji markiert — mit Material-3-Expressive-Physik-Animation (Fall mit Gravitation, Aufprall-Squash & abklingende Bounces) und Custom-Tooltip beim Hover
-- Echtzeit-Statusanzeige im Badge
-- Automatische Rate-Limit-Erkennung mit 60s Pause
-- Click-Fallback erkennt "Ausstehend"-Statuswechsel als Erfolg
-- DOM-Scan beim Laden (Debug-Output in Console)
+- **Self-Healing** gegen DOM- und API-Änderungen (siehe oben)
+- **Mehrsprachig** — Erkennung in DE / EN / FR / IT / ES / NL / PT
+- AN/AUS-Schalter über Popup, Anfragen-Zähler (persistent), API-Modus-Anzeige (`default` / `self-healed ✓`)
+- **Wochenkontingent im Popup** — 200 freie Kontaktanfragen pro Woche, verbraucht/verbleibend mit Fortschrittsbalken (plus rollierender 7-Tage-Wert); steht auch im Seiten-Badge
+- **Verlaufs-Chart** mit wählbarem Zeitraum (7 d / 30 d / 90 d / 1 Jahr) — im Popup und im HTML-Report
+- **Kontaktprotokoll** — jede gesendete Anfrage wird dauerhaft gespeichert (Name, Datum, Profil-URL, Headline, Firma, Ort, Kontaktgrad, Profil-ID, Sendeweg, Suchseite)
+- **CSV-Export** — Excel-fertig (Semikolon + UTF-8-BOM), Dateiname mit Datumsstempel
+- **HTML-Report-Export** — eigenständige Datei mit Chart, Kontingent und Kontakttabelle, ohne externe Assets
+- **Backup & Wiederherstellung** — alle Werte als JSON sichern und zurückspielen; strenger Import
+- **celox-ops-Anbindung** — gesendete Anfragen als Rainmaker-Leads (Status „angeschrieben"), per CSV-Import in ops oder als Push aus der Extension (Service-Worker, optional automatisch)
+- **Duplikatsperre über Sessions** — wer einmal im Protokoll steht, wird nie erneut angefragt
+- Visuelles Status-Badge unten rechts auf der Seite, mit Klartext-Hinweis nach einem Extension-Update
+- Erfolgreiche Vernetzungen werden mit 🍻-Emoji markiert — Material-3-Expressive-Physik-Animation (Fall mit Gravitation, Aufprall-Squash, abklingende Bounces) und Custom-Tooltip
+- Automatische Rate-Limit-Erkennung mit 60-s-Pause; Click-Fallback erkennt „Ausstehend"-Statuswechsel als Erfolg
+- **Versionsnummer + Links im Footer** des Popups (SemVer)
 
 ## Installation
 
 ### Option 1: Download (empfohlen)
 
-1. **[Neueste Version herunterladen](https://github.com/pepperonas/linkedin-spider/releases/latest)** — ZIP-Datei unter "Assets"
+1. **[Neueste Version herunterladen](https://github.com/pepperonas/linkedin-spider/releases/latest)** — ZIP-Datei unter „Assets"
 2. ZIP entpacken — es entsteht ein Ordner `linkedin-spider`
 3. Chrome öffnen und `chrome://extensions` in die Adressleiste eingeben
 4. **Entwicklermodus** aktivieren (Schalter oben rechts)
-5. **"Entpackte Erweiterung laden"** klicken
+5. **„Entpackte Erweiterung laden"** klicken
 6. Den entpackten `linkedin-spider`-Ordner auswählen
 7. Die Extension erscheint in der Chrome-Toolbar
 
@@ -121,11 +179,21 @@ git clone https://github.com/pepperonas/linkedin-spider.git
 ```
 
 1. Chrome öffnen: `chrome://extensions`
-2. "Entwicklermodus" aktivieren (oben rechts)
-3. "Entpackte Erweiterung laden" klicken
+2. „Entwicklermodus" aktivieren (oben rechts)
+3. „Entpackte Erweiterung laden" klicken
 4. Den geklonten Ordner auswählen
 
-> **Hinweis:** Nach jedem Code-Update das Refresh-Icon auf der Extension-Karte klicken **und** den LinkedIn-Tab neu laden (F5) — sonst läuft der alte Content-Script mit ungültigem Kontext weiter.
+> **Hinweis:** Nach jedem Code-Update das Refresh-Icon auf der Extension-Karte klicken **und** den LinkedIn-Tab neu laden (F5) — sonst läuft das alte Content-Script mit ungültigem Kontext weiter (die Extension zeigt dann `⚠️ Reload this page`).
+
+### Kompatibilität
+
+| | |
+|---|---|
+| Browser | **Chrome 102** oder neuer (`minimum_chrome_version` im Manifest — ältere Versionen verweigern die Installation, statt später an `optional_host_permissions` zu scheitern) |
+| Andere Chromium-Browser (Edge, Brave, Vivaldi) | technisch kompatibel, **nicht getestet** |
+| Firefox / Safari | nicht unterstützt (MV3-Service-Worker + `chrome.*`-API) |
+| LinkedIn-Sprache | DE, EN, FR, IT, ES, NL, PT |
+| Verteilung | GitHub-Release-ZIP, **kein** Chrome-Web-Store-Eintrag — Sideload-Installationen aktualisieren sich nicht von selbst |
 
 ## Verwendung
 
@@ -218,6 +286,22 @@ Zwei Wege, dieselbe Abbildung:
 | **CSV-Import** | ops → Pipeline → **„Spider-CSV"** | Der Export von oben, mit Vorschau (neu / ergänzt / bereits vorhanden) vor der Übernahme. Kein Token nötig. |
 | **Push aus der Extension** | Popup-Zeile `ops: … pending` → **Sync**, oder automatisch nach jedem Versand | Läuft im Service-Worker, überlebt also das Schließen des Popups. |
 
+```mermaid
+sequenceDiagram
+    participant CS as content.js
+    participant ST as chrome.storage.local
+    participant BG as background.js (Service-Worker)
+    participant OPS as celox ops
+    CS->>ST: lcLog += Kontakt · lcEvents += Zeitstempel
+    ST-->>BG: onChanged(lcLog) — nur bei Auto-Sync, 3 s entprellt
+    Note over BG: oder: „Sync" im Popup / auf der Optionsseite
+    BG->>ST: lcOps, lcLog, lcOpsState lesen
+    BG->>OPS: POST /api/rainmaker/leads/import/linkedin-spider<br/>Bearer ops_… · rows[] · commit:true
+    OPS-->>BG: je Zeile: create / update / unchanged / invalid
+    BG->>ST: lcOpsState[Profil] = ok · lcOpsLast = Zusammenfassung
+    Note over BG,OPS: Fehler (401, Netz): nichts markiert — nächster Lauf versucht es erneut
+```
+
 Einrichtung für den Push: in ops unter **Einstellungen → „API-Token für LinkedIn Spider"** einen
 Token erzeugen (wird genau einmal angezeigt), dann im Popup auf ⚙ → Token eintragen → **Test
 connection** → **Save**. Optional **„Sync automatically"** einschalten.
@@ -246,60 +330,158 @@ Unten im Popup stehen die **Versionsnummer** (SemVer, direkt aus `manifest.json`
 - "🕸️ ❌ No CSRF Token!" (rot) — API-Fehler
 - "🕸️ ⚠️ Reload this page" (rot) — die Extension wurde aktualisiert, dieser Tab laeuft noch auf dem alten Content-Script. **Seite neu laden**, dann laeuft es weiter
 
+## Berechtigungen und Daten
+
+### Berechtigungen
+
+Die Extension fragt genau das an, was sie braucht — und die Tabelle sagt, wofür:
+
+| Berechtigung | Wofür |
+|---|---|
+| `activeTab` | Das Popup spricht mit dem gerade aktiven LinkedIn-Tab (Statusabfrage, AN/AUS). |
+| `storage` | Zähler, Protokoll, Kontingent-Historie, gelerntes Recipe, ops-Einstellungen — alles in `chrome.storage.local`. |
+| `downloads` | CSV, HTML-Report und Backup werden über die Downloads-API mit Speichern-Dialog und vorgeschlagenem Dateinamen geschrieben. |
+| `https://ops.celox.io/*` (`host_permissions`) | Der Service-Worker darf Leads an celox ops senden — nur an diesen Host. |
+| `https://*/*`, `http://localhost/*`, `http://127.0.0.1/*` (`optional_host_permissions`) | **Nicht** von Haus aus erteilt. Wird nur angefragt, wenn Sie auf der Optionsseite eine **eigene** ops-Adresse speichern (Chrome zeigt dann einen Dialog). `localhost` erlaubt eine Entwicklungsinstanz. |
+| `*://*.linkedin.com/*` (Content-Scripts) | `interceptor.js`, `lib.js` und `content.js` laufen nur auf LinkedIn-Seiten. |
+
+### Was gespeichert wird
+
+Alles liegt in `chrome.storage.local` — also im Chrome-Profil auf Ihrem Rechner, nicht in der Cloud, nicht in `chrome.storage.sync`.
+
+| Schlüssel | Inhalt | Gelöscht durch |
+|---|---|---|
+| `lcEnabled` | AN/AUS-Zustand des Schalters | — |
+| `lcCount` | Zähler „Requests sent" (läuft seit der ersten Installation) | Reset Counter |
+| `lcLog` | Kontaktprotokoll (max. 5000 Einträge, FIFO), Grundlage für Exporte und Duplikatsperre | Clear Log |
+| `lcEvents` | Zeitstempel jeder gesendeten Anfrage (max. 400 Tage / 20 000), Grundlage für Kontingent und Chart — **bleibt bei Clear Log erhalten**, sonst wäre das Kontingent falsch | Backup-Restore |
+| `lcRecipe` | Das gelernte Invite-Recipe (Self-Healing) | wird bei Fehlschlag automatisch verworfen |
+| `lcRange` | Gewählter Chart-Zeitraum | — |
+| `lcOps` | ops-Adresse, API-Token, Auto-Sync-Schalter | Optionsseite |
+| `lcOpsState` | Je Kontakt: von ops bestätigt / ungültig / Fehler (getrennt von `lcLog`, damit Worker und Content-Script nie dieselbe Liste schreiben) | „Forget sync state" |
+| `lcOpsLast` | Zusammenfassung des letzten Sync-Laufs | „Forget sync state" |
+
+### Was den Browser verlässt
+
+- **An LinkedIn:** die Kontaktanfragen selbst (Voyager API) und der Vanity-Lookup — nichts anderes.
+- **An celox ops:** **nur wenn Sie einen Token hinterlegt haben.** Dann die Felder des Kontaktprotokolls (Name, Profil-URL, Headline, Firma, Ort, Kontaktgrad, Profil-ID, Sendeweg, Suchseite, Zeitpunkt) an den Host aus `lcOps.baseUrl`. Der Token berechtigt in ops ausschließlich zum Import.
+- **An niemanden sonst.** Keine Telemetrie, keine Analytics, kein Update-Check, keine externen Assets in den Exporten.
+- Das Backup-JSON entfernt Session-Header (`csrf-token`, `cookie`, `authorization`) aus dem gespeicherten Recipe, bevor es die Datei schreibt.
+
 ## Architektur
 
-Zwei Content-Script-Welten plus Popup:
+Zwei Content-Script-Welten, ein Service-Worker, zwei Oberflächen:
 
 | Datei | World | Rolle |
 |-------|-------|-------|
-| `interceptor.js` | **MAIN** (`document_start`) | Patcht `fetch`/`XMLHttpRequest`, schneidet LinkedIns Invite-Request mit, schickt das "Recipe" per `postMessage` |
-| `lib.js` | ISOLATED | Reine, testbare Kernfunktionen: Selektoren, Recipe-Bau, Invite-Erkennung, Kontingent-/Chart-Mathematik, SVG-Chart, Backup-Format |
+| `interceptor.js` | **MAIN** (`document_start`) | Patcht `fetch`/`XMLHttpRequest`, schneidet LinkedIns Invite-Request mit, schickt das „Recipe" per `postMessage` |
+| `lib.js` | ISOLATED | Reine, testbare Kernfunktionen: Selektoren, Recipe-Bau, Invite-Erkennung, Kontingent-/Chart-Mathematik, SVG-Chart, Backup-Format, ops-Sync-Kern |
 | `content.js` | ISOLATED | Orchestrierung: DOM-Scan, recipe-getriebene API-Calls, Click-Fallback, Recipe-Lernen, Badge, Kontingent-Historie |
-| `popup.html` / `popup.js` | — | Popup-UI: Toggle, Kontingent, Chart, Counter, API-Modus, ops-Zeile, CSV-/HTML-/Backup-Export, Restore, Footer (lädt `lib.js` mit) |
 | `background.js` | Service-Worker | ops-Sync: reagiert auf `opsSync`/`opsTest`-Nachrichten und (bei Auto-Sync) auf neue Protokoll-Einträge; die Logik selbst ist `lib.js::opsSyncRun` mit injiziertem `fetch` |
+| `popup.html` / `popup.js` | — | Popup-UI: Toggle, Kontingent, Chart, Counter, API-Modus, ops-Zeile, CSV-/HTML-/Backup-Export, Restore, Footer (lädt `lib.js` mit) |
 | `options.html` / `options.js` / `options.css` | — | Optionsseite: ops-URL, API-Token, Auto-Sync, Verbindungstest, Sync-Stand, „Forget sync state" |
 | `styles.css` | — | Popup-Styling |
 | `manifest.json` | — | Chrome Extension Manifest V3 |
 | `icon.png` | — | Extension-Icon |
 
+`lib.js` wird von **allen** Oberflächen geladen (Content-Script, Popup, Optionsseite, Service-Worker per `importScripts`) und ist zugleich das Ziel der Unit-Tests — dieselbe Datei, kein Nachbau.
+
+### Nachrichten-Protokoll
+
+| Aktion | Richtung | Payload | Antwort |
+|---|---|---|---|
+| `toggle` | Popup → Content-Script | `{ enabled }` | `{ ok }` |
+| `getStatus` | Popup → Content-Script | — | `{ active, count, healed, contextGone }` |
+| `resetCount` · `clearLog` · `reloadState` | Popup → Content-Script | — | `{ ok }` |
+| `opsSync` | Popup/Optionen → **Service-Worker** | — | `{ ok, summary, error }` |
+| `opsTest` | Optionen → **Service-Worker** | `{ settings: { baseUrl, token } }` | `{ ok, status?, error? }` |
+| `invite-captured` | `interceptor.js` → Content-Script (`window.postMessage`, nur eigene Origin) | `{ recipe }` | — |
+
+Antwortet der Tab nicht (kein Content-Script, oder nach einem Extension-Update), zeigt das Popup `⚠️ Reload the LinkedIn tab` statt „Paused" und drosselt seine Abfrage von 1 s auf 5 s.
+
 ## Tests
 
 ```bash
 npm install
-npm test
+npm test            # einmal
+npx vitest          # Watch-Modus
+npx vitest run test/lib.test.js          # eine Datei
+npx vitest run -t "buildInviteRequest"    # ein Test
 ```
 
-**346 Unit- und Integrationstests** mit Vitest + jsdom (Zeitzone in `vitest.config.js` auf `Europe/Berlin` gepinnt — die Kontingent- und Chart-Rechnung ist kalenderlokal, und der Fehler, den naive Millisekunden-Arithmetik erzeugt, existiert nur dort, wo die Uhren wirklich springen):
-- `test/lib.test.js` — Kernfunktionen, Self-Healing-Helfer (Recipe-Bau, Invite-Erkennung), Mehrsprachen-Erkennung
-- `test/export.test.js` — Namensschälung, Kartenextraktion, CSV-Erzeugung (Quoting, Injection-Schutz, BOM), Dateiname, Protokoll-Deckel
-- `test/content-log.test.js` — lädt `content.js` echt und fährt einen kompletten Tick: erfolgreicher Send landet mit Kartendaten im Protokoll, Duplikatsperre greift
-- `test/popup-export.test.js` — lädt `popup.html` + `popup.js` echt: Export-Download, Abbruch-Verhalten, Zwei-Schritt-Löschen
-- `test/content.test.js` — Integrationstests für Message-Handling und DOM-Interaktion
-- `test/popup.test.js` — Popup-UI und Chrome-API-Tests
-- `test/stats.test.js` — Kontingent-Rechnung (Kalenderwoche, rollierende 7 Tage, Kappung), Bucket-Bildung je Zeitraum, SVG-Chart (Skalierung, laufende Spalte, Escaping, Leerzustand)
-- `test/backup.test.js` — Backup-Format, Secret-Stripping, strenge Import-Validierung (fremde/kaputte/zu neue Dateien)
-- `test/popup-stats.test.js` — lädt `popup.html` + `popup.js` echt: Kontingent-Anzeige, Chart + Zeitraumwahl, HTML-Report, Backup-/Restore-Roundtrip, Footer-Links
-- `test/report.test.js` — HTML-Report: Eigenständigkeit (kein Skript, kein externer Verweis), Escaping gescrapter Namen, Kontingent-/Zeitraum-Angaben, Leerzustand
-- `test/styles.test.js` — Kontrast-Untergrenzen (4,5:1 bzw. 3:1) für Popup **und** Report-CSS, Layout-Vertrag der Knopfreihe, jede von `popup.js` gesuchte ID existiert im Markup
-- `test/resilience.test.js` — Verhalten nach einem Extension-Reload (Badge-Hinweis, Timer abgeraeumt, `getStatus` meldet es) + Laufzeit-Deckel fuer den Backfill
-- `test/ops-sync.test.js` — Sync-Kern (`opsSyncRun` mit injiziertem `fetch`): Bearer-Token, Stapel, Zuordnung per Antwort-Index, 401/Netzfehler lassen den Stand unberührt, „ungültig" wird nicht ewig wiederholt
-- `test/background.test.js` — lädt `background.js` echt: Sync auf Nachricht, Auto-Sync mit Entprellung, kein paralleler Lauf, `lcLog` wird nie angefasst
-- `test/options.test.js` — lädt `options.html` + `options.js` echt: Validierung, Host-Berechtigung, Verbindungstest, Sync-Stand, zweistufiges Vergessen
-- `test/version.test.js` — SemVer, Gleichstand `manifest.json` ↔ `package.json` ↔ README-Badge, Footer-Vertrag, **Doku-Integritaet** (kein toter Bildverweis, jedes Bild mit Alt-Text, beide READMEs listen genau die vorhandenen Test-Dateien)
-- `test/release.test.js` — prüft, dass das Release-ZIP jede vom Manifest referenzierte Datei enthält
+**392 Unit- und Integrationstests** mit Vitest + jsdom (Zeitzone in `vitest.config.js` auf `Europe/Berlin` gepinnt — die Kontingent- und Chart-Rechnung ist kalenderlokal, und der Fehler, den naive Millisekunden-Arithmetik erzeugt, existiert nur dort, wo die Uhren wirklich springen):
 
-Einzelne Datei / einzelner Test:
+| Datei | Prüft |
+|---|---|
+| `test/lib.test.js` | Kernfunktionen, Self-Healing-Helfer (Recipe-Bau, Invite-Erkennung), Mehrsprachen-Erkennung |
+| `test/interceptor.test.js` | **lädt `interceptor.js` echt** in jsdom: mitgeschnittener `fetch`/XHR-Invite wird als Recipe gepostet, Fremdes nicht, nur POST, nur eigene Origin — und Paritätstest der Heuristik gegen `lib.js` (die Datei trägt sie doppelt, weil die MAIN-World `window.LC` nicht sieht) |
+| `test/export.test.js` | Namensschälung, Kartenextraktion, CSV-Erzeugung (Quoting, Injection-Schutz, BOM), Dateiname, Protokoll-Deckel |
+| `test/stats.test.js` | Kontingent-Rechnung (Kalenderwoche, rollierende 7 Tage, Kappung), Bucket-Bildung je Zeitraum, DST-Nächte, SVG-Chart (Skalierung, laufende Spalte, Escaping, Leerzustand) |
+| `test/backup.test.js` | Backup-Format, Secret-Stripping, strenge Import-Validierung (fremde/kaputte/zu neue Dateien) |
+| `test/report.test.js` | HTML-Report: Eigenständigkeit (kein Skript, kein externer Verweis), Escaping gescrapter Namen, Kontingent-/Zeitraum-Angaben, Leerzustand |
+| `test/ops-sync.test.js` | Sync-Kern (`opsSyncRun` mit injiziertem `fetch`): Bearer-Token, Stapel, Zuordnung per Antwort-Index, 401/Netzfehler lassen den Stand unberührt, „ungültig" wird nicht ewig wiederholt |
+| `test/content-log.test.js` | lädt `content.js` echt und fährt einen kompletten Tick: erfolgreicher Send landet mit Kartendaten im Protokoll, Zeitstempel für das Kontingent, Duplikatsperre greift, Backfill nur einmal |
+| `test/resilience.test.js` | Verhalten nach einem Extension-Reload (Badge-Hinweis, Timer abgeräumt, `getStatus` meldet es) + Laufzeit-Deckel für den Backfill |
+| `test/background.test.js` | lädt `background.js` echt: Sync auf Nachricht, Auto-Sync mit Entprellung, kein paralleler Lauf, `lcLog` wird nie angefasst |
+| `test/popup-export.test.js` | lädt `popup.html` + `popup.js` echt: Export-Download, Abbruch-Verhalten, Zwei-Schritt-Löschen |
+| `test/popup-stats.test.js` | lädt `popup.html` + `popup.js` echt: Kontingent-Anzeige, Chart + Zeitraumwahl, HTML-Report, Backup-/Restore-Roundtrip, unerreichbarer Tab, ops-Zeile, Footer-Links |
+| `test/options.test.js` | lädt `options.html` + `options.js` echt: Validierung, Host-Berechtigung, Verbindungstest, Sync-Stand, zweistufiges Vergessen |
+| `test/styles.test.js` | Kontrast-Untergrenzen (4,5:1 bzw. 3:1) für Popup, Optionsseite **und** Report-CSS, Layout-Vertrag der Knopfreihe, jede von `popup.js` gesuchte ID existiert im Markup |
+| `test/docs.test.js` | Doku-Wächter: Inhaltsverzeichnis ↔ Überschriften, DE/EN-Parität (Abschnitte, Diagramme, Bilder, Badge-Zahl), jeder Speicherschlüssel und jede Berechtigung dokumentiert, Mindest-Chrome-Version, keine toten Links, Badges gegen Konstanten geprüft |
+| `test/version.test.js` | SemVer, Gleichstand `manifest.json` ↔ `package.json` ↔ README-Badge, Footer-Vertrag, Doku-Integrität (Bildverweise, Alt-Texte, Testliste) |
+| `test/release.test.js` | prüft, dass das Release-ZIP **jeden** Manifest-Einstieg enthält — Content-Scripts, Popup, Service-Worker samt `importScripts`, Optionsseite samt ihrer Assets |
+| `test/content.test.js` · `test/popup.test.js` | ältere Simulations-Tests für Message-Handling und Popup-UI |
+
+### Testkonventionen
+
+- **Echte Dateien laden, nicht nachbauen.** `content.js`, `background.js`, `interceptor.js`, `popup.html`+`popup.js`, `options.html`+`options.js` werden in jsdom ausgeführt (Chrome-API und `fetch` gestubbt, Timer gefälscht). Ein Test, der die Logik nur nachahmt, kann grün bleiben, während die ausgelieferte Datei kaputt ist.
+- **Jede neue Zusicherung wird einmal mutiert.** Ein Test, den man nicht hat scheitern sehen, ist keine Zusicherung. Mehrere Wächter in diesem Repo waren beim ersten Wurf grün-blind — die Proben haben es gezeigt, die Tests wurden nachgeschärft.
+- **Reine Logik liegt in `lib.js`** (`window.LC` + `module.exports`), damit dieselbe Datei Unit-Test-Ziel ist. Der ops-Sync-Kern nimmt `fetch` als Parameter — derselbe Code läuft im Service-Worker, in jsdom und in Node gegen ein echtes ops.
+
+## Entwicklung
+
+Kein Build-Schritt. Änderungen an `.js`-Dateien: Extension-Karte in `chrome://extensions` aktualisieren, LinkedIn-Tab neu laden. Alle Logs im Tab-DevTools-Console tragen das Präfix `[LC]` (Content-Script), `[LC-MAIN]` (Interceptor), `[LC-bg]` (Service-Worker, Console in `chrome://extensions` → „Service Worker").
+
+**Wo was hingehört:** Logik, die man testen will → `lib.js`. Zustand und Orchestrierung → `content.js`. Alles, was den Browser verlassen soll → `background.js`. Styles des Popups → `styles.css` (nicht in LinkedIn injiziert; die Styles des 🍻-Markers leben in `content.js`).
+
+### Release
+
 ```bash
-npx vitest run test/lib.test.js
-npx vitest run -t "buildInviteRequest"
+git tag vX.Y.Z && git push --tags
 ```
 
-## CI/CD
+löst `.github/workflows/release.yml` aus: Tests → ZIP → GitHub Release. Die Paketliste ist eine `cp`-Zeile; `test/release.test.js` hält fest, dass sie jeden Manifest-Einstieg abdeckt — nach genau dem Fehler, der 2.7.0–2.7.4 ohne `interceptor.js` ausgeliefert hat. Versionsnummer in `manifest.json` **und** `package.json` (Test pinnt Gleichstand), Badge und Changelog-Eintrag in **beiden** READMEs (Test pinnt auch das).
 
-- **Tests** — Laufen automatisch bei Push auf `main` und bei Pull Requests
-- **Release** — Bei Push eines `v*`-Tags werden Tests ausgeführt und ein GitHub Release mit ZIP erstellt
+## Problembehebung
+
+| Symptom | Ursache | Abhilfe |
+|---|---|---|
+| Badge `⚠️ Reload this page`, Popup `⚠️ Reload the LinkedIn tab` | Die Extension wurde aktualisiert, der Tab läuft noch auf dem alten Content-Script | LinkedIn-Tab neu laden (F5) |
+| Popup zeigt „Paused", nichts passiert | Der aktive Tab ist keine LinkedIn-Seite | Auf einen LinkedIn-Tab wechseln, Popup erneut öffnen |
+| Badge `✅ Active - no buttons` | Auf der Seite gibt es keine unbearbeiteten „Vernetzen"-Buttons — alle gesendet, übersprungen (schon im Protokoll) oder LinkedIn zeigt „Folgen" statt „Vernetzen" | Weiter scrollen / nächste Seite |
+| Badge `❌ Rate-Limit! 60s pause...` | LinkedIn antwortet mit HTTP 429 | Nichts tun — läuft nach 60 s weiter |
+| Badge `❌ No CSRF Token!` | Kein `JSESSIONID`-Cookie — nicht eingeloggt oder Cookies geblockt | Bei LinkedIn einloggen |
+| Kontakte werden übersprungen, obwohl noch nie angefragt | Die Profile stehen im Protokoll (`lcLog`) — Duplikatsperre | Gewollt. Notfalls **Clear Log** (hebt die Sperre für alle auf) |
+| „Requests sent" viel größer als „Saved contacts" | Der Zähler läuft seit der Erstinstallation, das Protokoll erst seit 2.8.0 | Kein Fehler; Chart und Kontingent reichen nur bis zum Anlegen des Protokolls zurück |
+| Chart zeigt nur eine Säule | Die Historie ist jünger als der gewählte Zeitraum | Kürzeren Zeitraum wählen oder abwarten |
+| Popup-Zeile `ops: ops answered 401: …` | Token widerrufen, erneuert oder falsch eingetragen | In ops neuen Token erzeugen, auf der Optionsseite eintragen, **Test connection** |
+| `ops: ops unreachable: …` | Kein Netz oder ops nicht erreichbar | Später erneut — ausstehende Kontakte bleiben ausstehend |
+| Optionsseite: „Chrome did not grant access to …" | Eigene ops-Adresse, Berechtigungsdialog abgelehnt | Erneut **Save**, Dialog bestätigen |
+| Import in ops meldet „ungültig" | Zeile ohne LinkedIn-Profil-URL (`linkedin.com/in/…`) | Wird nicht wiederholt — gewollt |
+| CSV öffnet in Excel in einer Spalte | Excel-Sprache ignoriert das Semikolon | Datei per „Daten → Aus Text" mit Trennzeichen `;` importieren |
+| Deploy/Update kommt nicht an | Alte Extension-Version aus dem Cache | `chrome://extensions` → Aktualisieren, Tab neu laden; Version im Popup-Footer prüfen |
 
 ## Changelog
+
+### 2.10.1 — Dokumentation, Tests, Manifest-Härtung
+
+- **README neu strukturiert** (DE + EN spiegelgleich): Inhaltsverzeichnis, „Auf einen Blick", Kompatibilität mit Mindest-Chrome-Version, **Berechtigungen und Daten** (jede Berechtigung erklärt, jeder Speicherschlüssel dokumentiert, was den Browser verlässt), Nachrichten-Protokoll, Problembehebung, Rechtliches (LinkedIn-Nutzungsbedingungen), zwei Mermaid-Diagramme (Self-Healing-Schleife, ops-Sync-Sequenz), 44 Badges — nur solche, deren Aussage stimmt (kein Store-, kein Coverage-Badge)
+- **`minimum_chrome_version: 102`** im Manifest — `optional_host_permissions` gibt es erst ab Chrome 102; ältere Versionen verweigern jetzt die Installation, statt später still zu scheitern
+- **`interceptor.js` hat erstmals Tests** (20): die Datei wird echt in jsdom geladen — mitgeschnittener `fetch`-/XHR-Invite wird als Recipe gepostet, Fremdes nicht, nur POST, nur eigene Origin — plus Paritätstest der Invite-Heuristik gegen `lib.js` (die MAIN-World-Kopie konnte bisher unbemerkt driften)
+- **Doku-Wächter** (`test/docs.test.js`, 22): Inhaltsverzeichnis ↔ Überschriften, DE/EN-Parität, jeder `lc*`-Speicherschlüssel und jede Manifest-Berechtigung dokumentiert, Mindest-Chrome-Version, keine toten Links, Badges gegen Konstanten
+- Kontrast-Wächter deckt jetzt auch Optionsseite und ops-Zeile ab (WCAG-AA-Badge gilt für alle Oberflächen)
+- GitHub Actions auf `checkout@v5` / `setup-node@v5` (Node-20-Abkündigung)
+- Suite 346 → 392
 
 ### 2.10.0 — celox-ops-Anbindung
 
@@ -402,15 +584,25 @@ einzige Abhilfe ist ein Reload der Seite; genau das steht jetzt da.
 ## Hinweise
 
 - Funktioniert nur auf `*.linkedin.com`-Seiten
-- `interceptor.js` läuft im MAIN-World bei `document_start`, `lib.js`/`content.js` im ISOLATED-World bei `document_idle`
+- `interceptor.js` läuft in der MAIN-World bei `document_start`, `lib.js`/`content.js` in der ISOLATED-World bei `document_idle`
 - Bei Reload der LinkedIn-Seite bleibt der AN/AUS-Status erhalten
-- Counter und gelerntes API-Recipe werden in `chrome.storage.local` gespeichert
-- Bereits verarbeitete Profile werden per Set im Speicher getrackt (überlebt DOM-Ersetzung durch LinkedIn)
+- Bereits verarbeitete Profile werden per Set im Speicher getrackt (überlebt DOM-Ersetzung durch LinkedIn) und aus dem Protokoll vorbefüllt (überlebt Reloads)
 - Modals werden automatisch übersprungen (kein Versand bei Buttons in Dialogen)
+- Die Extension **stoppt nicht** von selbst am Wochenkontingent — die Anzeige informiert, die Entscheidung bleibt beim Nutzer
+- Was die Extension nicht wissen kann: ob eine Anfrage **angenommen** wurde. Sie sieht nur den Versand
+
+## Rechtliches
+
+Automatisiertes Versenden von Kontaktanfragen verstößt gegen LinkedIns Nutzungsbedingungen (User Agreement, Abschnitt „Dos and Don'ts"). LinkedIn kann Konten einschränken oder sperren. Dieses Projekt ist ein technisches Werkzeug ohne Verbindung zu LinkedIn; die Nutzung geschieht **auf eigenes Risiko und in eigener Verantwortung**. Die Autoren übernehmen keine Haftung für Kontosperrungen oder sonstige Folgen. Wer die Extension einsetzt, sollte das Wochenkontingent respektieren und Empfänger nicht mit Anfragen überziehen.
 
 ## Sicherheit
 
-CSRF-Token wird automatisch aus dem Session-Cookie extrahiert und bei jedem Request frisch eingesetzt (ein mitgeschnittenes Token könnte abgelaufen sein). API-Calls nutzen `credentials: 'include'` und senden den `csrf-token`-Header gemäß LinkedIn Voyager-Protokoll. Gelernte Recipes verbleiben lokal in `chrome.storage` und werden nicht nach außen übertragen.
+- Der CSRF-Token wird automatisch aus dem Session-Cookie extrahiert und bei jedem Request frisch eingesetzt (ein mitgeschnittenes Token könnte abgelaufen sein). API-Calls nutzen `credentials: 'include'` und senden den `csrf-token`-Header gemäß LinkedIn-Voyager-Protokoll.
+- Gelernte Recipes verbleiben lokal in `chrome.storage`. Das Backup-JSON entfernt Session-Header aus dem Recipe, bevor es geschrieben wird.
+- Der ops-API-Token liegt im Browserprofil (`chrome.storage.local`), wird nur an den konfigurierten ops-Host gesendet und **nie** an den LinkedIn-Tab weitergereicht (ein Test pinnt das). In ops berechtigt er ausschließlich zum Lead-Import; ein Widerruf oder eine Rotation in ops macht ihn sofort wertlos.
+- CSV-Zellen sind gegen Formel-Injection geschützt (führende `= + - @` bekommen ein Apostroph) — es sind gescrapte Namen, die in einer Tabellenkalkulation landen. Der ops-Import nimmt genau dieses Apostroph wieder zurück.
+- Der HTML-Report escapt jeden gescrapten Text und lädt keine externen Ressourcen.
+- Keine Telemetrie, kein Update-Check, keine Verbindung zu Drittdiensten außer LinkedIn und — nur bei hinterlegtem Token — ops.
 
 ## Entwickler
 
