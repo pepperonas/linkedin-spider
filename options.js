@@ -1,6 +1,15 @@
 const urlEl = document.getElementById('ops-url');
 const tokenEl = document.getElementById('ops-token');
 const autoEl = document.getElementById('ops-auto');
+const paceJitterEl = document.getElementById('pace-jitter');
+const paceHourEl = document.getElementById('pace-hour');
+const paceDayEl = document.getElementById('pace-day');
+const paceStopEl = document.getElementById('pace-stop');
+const paceSaveBtn = document.getElementById('pace-save');
+const paceHint = document.getElementById('pace-hint');
+const stBlock = document.getElementById('st-block');
+const blockBtn = document.getElementById('ops-blocklist');
+const blockHint = document.getElementById('block-hint');
 const testBtn = document.getElementById('ops-test');
 const saveBtn = document.getElementById('ops-save');
 const syncBtn = document.getElementById('ops-sync-now');
@@ -89,9 +98,10 @@ function renderApiError(e) {
 }
 
 async function renderStatus() {
-  const { lcOps, lcLog, lcOpsState, lcOpsLast, lcUpdate, lcLastApiError } =
-    await storageGet(['lcOps', 'lcLog', 'lcOpsState', 'lcOpsLast', 'lcUpdate', 'lcLastApiError']);
+  const { lcOps, lcLog, lcOpsState, lcOpsLast, lcUpdate, lcLastApiError, lcBlock } =
+    await storageGet(['lcOps', 'lcLog', 'lcOpsState', 'lcOpsLast', 'lcUpdate', 'lcLastApiError', 'lcBlock']);
   renderApiError(lcLastApiError);
+  renderBlock(lcBlock, !!(lcOps && lcOps.token));
   if (lcUpdate && !updateResult.textContent) renderUpdate(Object.assign({ ok: true, cached: true }, lcUpdate));
   const state = lcOpsState || {};
   const log = Array.isArray(lcLog) ? lcLog : [];
@@ -119,12 +129,63 @@ async function renderStatus() {
   }
 }
 
+function renderBlock(block, configured) {
+  blockBtn.disabled = !configured;
+  const b = LC.normalizeBlock(block);
+  if (!b.at) { stBlock.textContent = 'Not fetched yet.'; return; }
+  stBlock.textContent = b.count + ' profile' + (b.count === 1 ? '' : 's') + ' — refreshed ' +
+    LC.formatTimestamp(new Date(b.at).toISOString()) + '.';
+}
+
+blockBtn.addEventListener('click', async () => {
+  blockBtn.disabled = true;
+  blockHint.textContent = 'Fetching…';
+  blockHint.classList.remove('error');
+  const resp = await askWorker({ action: 'opsBlocklist' });
+  if (resp && resp.ok) {
+    blockHint.textContent = 'List refreshed: ' + resp.count + ' profile' + (resp.count === 1 ? '' : 's') + ' to skip.';
+  } else {
+    blockHint.textContent = 'Refresh failed: ' + ((resp && resp.error) || 'no answer from the extension');
+    blockHint.classList.add('error');
+  }
+  await renderStatus();
+});
+
+// --- pacing -----------------------------------------------------------------
+// 0 means "no cap" and is shown as an empty field, so the placeholder can say so.
+function fillPace(pace) {
+  const p = LC.normalizePace(pace);
+  paceJitterEl.checked = p.jitter;
+  paceHourEl.value = p.perHour ? String(p.perHour) : '';
+  paceDayEl.value = p.perDay ? String(p.perDay) : '';
+  paceStopEl.value = p.stopAtPercent ? String(p.stopAtPercent) : '';
+}
+
+paceSaveBtn.addEventListener('click', async () => {
+  const pace = LC.normalizePace({
+    jitter: paceJitterEl.checked,
+    perHour: paceHourEl.value,
+    perDay: paceDayEl.value,
+    stopAtPercent: paceStopEl.value
+  });
+  await storageSet({ lcPace: pace });
+  fillPace(pace);   // show what was actually stored (clamped)
+  const caps = [];
+  if (pace.perHour) caps.push(pace.perHour + '/hour');
+  if (pace.perDay) caps.push(pace.perDay + '/day');
+  if (pace.stopAtPercent) caps.push('stop at ' + pace.stopAtPercent + ' %');
+  paceHint.textContent = 'Saved. ' + (caps.length ? 'Caps: ' + caps.join(', ') + '.' : 'No caps.') +
+    (pace.jitter ? ' Jitter on.' : ' Fixed 1.5-s beat.');
+  paceHint.classList.remove('error');
+});
+
 async function load() {
-  const { lcOps } = await storageGet(['lcOps']);
+  const { lcOps, lcPace } = await storageGet(['lcOps', 'lcPace']);
   const s = lcOps || {};
   urlEl.value = s.baseUrl || LC.OPS_DEFAULT_URL;
   tokenEl.value = s.token || '';
   autoEl.checked = !!s.auto;
+  fillPace(lcPace);
   await renderStatus();
 }
 

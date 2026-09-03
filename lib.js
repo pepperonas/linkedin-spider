@@ -119,12 +119,18 @@
     return (parseInt(el.getAttribute('data-lc-fails'), 10) || 0) >= MAX_CLICK_FAILS;
   }
 
+  // ops said "do not contact" — the content script marks the card once it
+  // has read the profile URL; from then on the scan walks past it.
+  function isBlockedCard(el) {
+    return el.hasAttribute('data-lc-blocked');
+  }
+
   function findNextConnect(processedProfiles) {
     // Strategy 1: legacy data-view-name container (older LinkedIn UIs)
     const dvn = document.querySelectorAll('[data-view-name="edge-creation-connect-action"] a, [data-view-name="edge-creation-connect-action"] button');
     for (const el of dvn) {
       if (!isConnectButton(el)) continue;
-      if (tooManyFails(el)) continue;
+      if (tooManyFails(el) || isBlockedCard(el)) continue;
       if (el.closest('[role="dialog"], .artdeco-modal, dialog')) continue;
       const pid = getProfileId(el);
       if (pid && processedProfiles.has(pid)) continue;
@@ -135,7 +141,7 @@
     const candidates = document.querySelectorAll('a, button, [role="button"]');
     for (const el of candidates) {
       if (!isConnectButton(el)) continue;
-      if (tooManyFails(el)) continue;
+      if (tooManyFails(el) || isBlockedCard(el)) continue;
       if (el.closest('[role="dialog"], .artdeco-modal, dialog')) continue;
       const pid = getProfileId(el);
       if (pid && processedProfiles.has(pid)) continue;
@@ -789,7 +795,7 @@
   // --- Backup / restore -----------------------------------------------------
   const BACKUP_APP = 'linkedin-spider';
   const BACKUP_SCHEMA = 1;
-  const BACKUP_KEYS = ['lcEnabled', 'lcCount', 'lcLog', 'lcEvents', 'lcRecipe', 'lcRange', 'lcSeen'];
+  const BACKUP_KEYS = ['lcEnabled', 'lcCount', 'lcLog', 'lcEvents', 'lcRecipe', 'lcRange', 'lcSeen', 'lcPace'];
   const RECORD_FIELDS = ['ts', 'name', 'profileUrl', 'headline', 'company', 'location',
     'degree', 'profileId', 'method', 'pageUrl'];
   // Headers that carry a live session. The recipe works without them (a fresh
@@ -826,7 +832,8 @@
         lcEvents: normalizeEvents(s.lcEvents),
         lcRecipe: sanitizeRecipeForBackup(s.lcRecipe),
         lcRange: rangeByKey(s.lcRange).key,
-        lcSeen: addSeen([], Array.isArray(s.lcSeen) ? s.lcSeen : [])
+        lcSeen: addSeen([], Array.isArray(s.lcSeen) ? s.lcSeen : []),
+        lcPace: normalizePace(s.lcPace)
       }
     };
   }
@@ -872,7 +879,8 @@
       lcEvents: normalizeEvents(d.lcEvents),
       lcRecipe: isUsableRecipe(d.lcRecipe) ? d.lcRecipe : null,
       lcRange: rangeByKey(d.lcRange).key,
-      lcSeen: addSeen([], Array.isArray(d.lcSeen) ? d.lcSeen : [])
+      lcSeen: addSeen([], Array.isArray(d.lcSeen) ? d.lcSeen : []),
+      lcPace: normalizePace(d.lcPace)
     };
     return {
       ok: true,
@@ -1034,6 +1042,127 @@
   function updateCheckDue(info, now) {
     const at = info && typeof info.checkedAt === 'number' ? info.checkedAt : 0;
     return (now - at) >= UPDATE_CHECK_INTERVAL_MS;
+  }
+
+  // --- ops blocklist: the back channel (ops → extension) -----------------------
+  // ops knows whom NOT to ask again: closed leads (won/lost/dormant), people who
+  // are customers already, contacts marked as no longer in their role. The
+  // worker fetches the `linkedin_norm` keys, the content script matches the
+  // card's profile URL against them BEFORE sending.
+  const OPS_BLOCKLIST_PATH = '/api/rainmaker/leads/import/linkedin-spider/blocklist';
+
+  // ⚠️ Mirror of ops `services/lead_dedup.py::norm_linkedin`, pinned with the
+  // same examples in test/blocklist.test.js. Change both or neither.
+  function opsNormLinkedin(url) {
+    let u = String(url == null ? '' : url).trim().toLowerCase();
+    u = u.replace(/^https?:\/\//, '');
+    u = u.replace(/^[a-z0-9-]*\.?linkedin\.com/, 'linkedin.com');
+    u = u.replace(/[?#].*$/, '');
+    u = u.replace(/\/+$/, '').trim();
+    return u || null;
+  }
+
+  function normalizeBlock(raw) {
+    const b = raw && typeof raw === 'object' ? raw : {};
+    const seen = new Set();
+    const norms = [];
+    for (const n of Array.isArray(b.norms) ? b.norms : []) {
+      if (typeof n !== 'string' || !n || seen.has(n)) continue;
+      seen.add(n);
+      norms.push(n);
+    }
+    return { at: typeof b.at === 'number' ? b.at : 0, norms, count: norms.length };
+  }
+
+  function blockSet(block) {
+    return new Set(normalizeBlock(block).norms);
+  }
+
+  function isBlockedUrl(url, set) {
+    if (!set || !set.size) return false;
+    const key = opsNormLinkedin(url);
+    return !!key && set.has(key);
+  }
+
+  async function opsFetchBlocklist(opts) {
+    const o = opts || {};
+    const settings = o.settings || {};
+    const now = typeof o.now === 'number' ? o.now : Date.now();
+    const base = opsNormalizeUrl(settings.baseUrl);
+    if (!opsValidToken(settings.token)) return { ok: false, error: 'No valid ops API token configured' };
+    if (!base) return { ok: false, error: 'Invalid ops URL' };
+    const fetchFn = o.fetchFn || (typeof fetch === 'function' ? fetch : null);
+    let resp;
+    try {
+      resp = await fetchFn(base + OPS_BLOCKLIST_PATH, {
+        method: 'GET',
+        headers: { 'Authorization': 'Bearer ' + settings.token, 'Accept': 'application/json' }
+      });
+    } catch (e) {
+      return { ok: false, error: 'ops unreachable: ' + (e && e.message ? e.message : String(e)) };
+    }
+    if (!resp.ok) return { ok: false, status: resp.status, error: 'ops answered ' + resp.status };
+    let body;
+    try { body = await resp.json(); } catch (e) { return { ok: false, error: 'Unexpected payload (not JSON)' }; }
+    if (!body || !Array.isArray(body.norms)) return { ok: false, error: 'Unexpected payload (no norms)' };
+    return { ok: true, block: normalizeBlock({ at: now, norms: body.norms }) };
+  }
+
+  // --- pacing: jitter, hourly/daily caps, stop at X % of the weekly allowance --
+  // The 1.5-s metronome was the extension's most recognisable fingerprint. All
+  // caps are OFF by default (0 = unlimited); jitter is on because it costs
+  // nothing and a human never clicks on a fixed beat.
+  const TICK_MS = 1500;
+  const JITTER = 0.4;   // ±40 % around TICK_MS → 900–2100 ms
+  const PACE_DEFAULTS = Object.freeze({ jitter: true, perHour: 0, perDay: 0, stopAtPercent: 0 });
+
+  function clampInt(value, min, max) {
+    const n = Math.floor(Number(value));
+    if (!Number.isFinite(n)) return min;
+    return Math.min(max, Math.max(min, n));
+  }
+
+  function normalizePace(raw) {
+    const p = raw && typeof raw === 'object' ? raw : {};
+    return {
+      jitter: p.jitter === undefined ? PACE_DEFAULTS.jitter : !!p.jitter,
+      perHour: clampInt(p.perHour, 0, WEEKLY_QUOTA),
+      perDay: clampInt(p.perDay, 0, WEEKLY_QUOTA),
+      stopAtPercent: clampInt(p.stopAtPercent, 0, 100)
+    };
+  }
+
+  function nextTickDelay(jitter, rnd) {
+    if (!jitter) return TICK_MS;
+    const r = typeof rnd === 'function' ? rnd() : Math.random();
+    return Math.round(TICK_MS * (1 - JITTER + 2 * JITTER * r));
+  }
+
+  // Whether the next send must wait, and until when. Order matters: the hourly
+  // cap lifts soonest, the weekly stop latest — report what lifts first.
+  function paceBlocked(events, pace, now) {
+    const nowMs = Number.isFinite(toMs(now)) ? toMs(now) : Date.now();
+    const p = normalizePace(pace);
+    const list = normalizeEvents(events);
+    const open = { blocked: false, reason: null, resumeAt: null };
+
+    if (p.perHour > 0) {
+      const since = nowMs - 60 * 60 * 1000;
+      const lastHour = list.filter((t) => t >= since);
+      if (lastHour.length >= p.perHour) {
+        return { blocked: true, reason: 'hour', resumeAt: Math.min(...lastHour) + 60 * 60 * 1000 };
+      }
+    }
+    if (p.perDay > 0) {
+      const dayStart = startOfDay(nowMs);
+      const today = list.filter((t) => t >= dayStart).length;
+      if (today >= p.perDay) return { blocked: true, reason: 'day', resumeAt: addDays(dayStart, 1) };
+    }
+    if (p.stopAtPercent > 0) {
+      const q = weekQuota(list, nowMs);
+      if (q.percent >= p.stopAtPercent) return { blocked: true, reason: 'quota', resumeAt: q.resetsAt };
+    }
+    return open;
   }
 
   // --- ops sync: push sent requests into celox ops as Rainmaker leads --------
@@ -1271,7 +1400,18 @@
     UPDATE_CHECK_INTERVAL_MS,
     compareVersions,
     parseLatestRelease,
-    updateCheckDue
+    updateCheckDue,
+    TICK_MS,
+    PACE_DEFAULTS,
+    normalizePace,
+    nextTickDelay,
+    paceBlocked,
+    OPS_BLOCKLIST_PATH,
+    opsNormLinkedin,
+    normalizeBlock,
+    blockSet,
+    isBlockedUrl,
+    opsFetchBlocklist
   };
 
   root.LC = LC;

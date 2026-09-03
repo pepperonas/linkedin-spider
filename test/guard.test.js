@@ -96,6 +96,17 @@ describe('update check helpers', () => {
 });
 
 describe('backup carries the new keys', () => {
+  it('lcPace round-trips normalized, and an old backup without it restores the defaults', () => {
+    expect(BACKUP_KEYS).toContain('lcPace');
+    const b = buildBackup({ lcPace: { jitter: false, perHour: '30', perDay: -1, stopAtPercent: 500 } }, { version: 'x' });
+    expect(b.data.lcPace).toEqual({ jitter: false, perHour: 30, perDay: 0, stopAtPercent: 100 });
+    const parsed = parseBackup(JSON.stringify(b));
+    expect(parsed.ok).toBe(true);
+    expect(parsed.data.lcPace).toEqual({ jitter: false, perHour: 30, perDay: 0, stopAtPercent: 100 });
+    const old = parseBackup(JSON.stringify({ ...b, data: { ...b.data, lcPace: undefined } }));
+    expect(old.data.lcPace).toEqual({ jitter: true, perHour: 0, perDay: 0, stopAtPercent: 0 });
+  });
+
   it('lcSeen round-trips and is sanitized', () => {
     expect(BACKUP_KEYS).toContain('lcSeen');
     const b = buildBackup({ lcSeen: ['A', 'B', 5, null, 'A'] }, { version: 'x' });

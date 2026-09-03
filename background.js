@@ -17,7 +17,7 @@ importScripts('lib.js');
 (() => {
   const LOG = '[LC-bg]';
   const {
-    opsSyncRun, opsNormalizeUrl, opsValidToken, OPS_IMPORT_PATH,
+    opsSyncRun, opsNormalizeUrl, opsValidToken, OPS_IMPORT_PATH, opsFetchBlocklist,
     UPDATE_API, UPDATE_ORIGIN, compareVersions, parseLatestRelease, updateCheckDue
   } = self.LC;
 
@@ -33,6 +33,20 @@ importScripts('lib.js');
     return new Promise((resolve) => chrome.storage.local.set(obj, () => resolve()));
   }
 
+  // The back channel: ops tells us whom NOT to ask again. A failure here keeps
+  // the last good list — an outdated blocklist beats an empty one — and never
+  // turns a successful push into a failed sync.
+  async function refreshBlocklist(settings) {
+    const r = await opsFetchBlocklist({ settings, now: Date.now() });
+    if (!r.ok) {
+      console.log(LOG, 'blocklist not refreshed:', r.error);
+      return { ok: false, error: r.error };
+    }
+    await set({ lcBlock: r.block });
+    console.log(LOG, 'blocklist:', r.block.count, 'profiles');
+    return { ok: true, count: r.block.count };
+  }
+
   async function runSync(trigger) {
     if (running) { rerun = true; return running; }
     running = (async () => {
@@ -42,9 +56,10 @@ importScripts('lib.js');
         return { ok: false, summary: null, error: 'not configured' };
       }
       const out = await opsSyncRun({ settings, log: lcLog, state: lcOpsState, now: Date.now() });
-      await set({ lcOpsState: out.state, lcOpsLast: Object.assign({ trigger }, out.summary) });
+      const blocklist = await refreshBlocklist(settings);
+      await set({ lcOpsState: out.state, lcOpsLast: Object.assign({ trigger, blocklist }, out.summary) });
       console.log(LOG, 'sync', trigger, JSON.stringify(out.summary));
-      return { ok: !out.error, summary: out.summary, error: out.error };
+      return { ok: !out.error, summary: out.summary, error: out.error, blocklist };
     })().catch((e) => ({ ok: false, summary: null, error: String(e && e.message || e) }))
       .finally(() => {
         running = null;
@@ -127,6 +142,13 @@ importScripts('lib.js');
     }
     if (msg.action === 'opsTest') {
       testConnection(msg.settings).then(sendResponse);
+      return true;
+    }
+    if (msg.action === 'opsBlocklist') {
+      get(['lcOps']).then(({ lcOps }) => {
+        if (!lcOps || !lcOps.token) return { ok: false, error: 'not configured' };
+        return refreshBlocklist(lcOps);
+      }).then(sendResponse);
       return true;
     }
     return false;

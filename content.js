@@ -5,10 +5,11 @@
     realClick, buildInviteRequest, isUsableRecipe, DEFAULT_INVITE_RECIPE, MAX_CLICK_FAILS,
     extractCardInfo, buildRecord, appendRecord, profileIdsFromLog, LOG_CAP,
     appendEvent, backfillEvents, weekQuota,
-    addSeen, seenIds, isPendingText, isSearchPage, MAX_CONSECUTIVE_FAILS
+    addSeen, seenIds, isPendingText, isSearchPage, MAX_CONSECUTIVE_FAILS,
+    normalizePace, nextTickDelay, paceBlocked, blockSet, isBlockedUrl
   } = window.LC;
   let active = false;
-  let intervalId = null;
+  let tickTimer = null;     // the next scheduled tick (setTimeout, re-armed after each run)
   let count = 0;
   let pending = false;
   let rateLimited = false;
@@ -17,6 +18,11 @@
   let contextGone = false;  // the extension was reloaded out from under this page
   let consecutiveFails = 0; // cards that failed API AND click, in a row
   let halted = null;        // reason string once the circuit breaker tripped
+  let pace = normalizePace(null); // jitter + caps from the options page (lcPace)
+  let events = [];          // send timestamps — the caps count against these
+  let paused = null;        // { reason, resumeAt } while a pace cap holds the run
+  let blocked = new Set();  // ops blocklist (linkedin_norm keys) — do not contact
+  let blockedCount = 0;     // cards skipped on this page because ops closed them
   const processedProfiles = new Set();
   const vanityCache = new Map(); // vanity name -> resolved fsd_profile ID (or null)
 
@@ -85,10 +91,68 @@
     }
   }, 1500);
 
-  function setQuotaFromEvents(events) {
+  function setQuotaFromEvents(list) {
+    events = Array.isArray(list) ? list : [];
     const q = weekQuota(events, Date.now());
     quotaSuffix = q.used + '/' + q.limit + ' wk';
     renderBadge();
+  }
+
+  // --- Pacing ----------------------------------------------------------------
+  // Ticks are chained setTimeouts, not a setInterval: with jitter on, every gap
+  // is rolled anew (900–2100 ms), so the run never has a fixed beat. Caps come
+  // from the options page (lcPace) and pause the run — they never halt it.
+  function clearTick() {
+    if (tickTimer) { clearTimeout(tickTimer); tickTimer = null; }
+  }
+
+  function scheduleTick() {
+    clearTick();
+    if (!active) return;
+    tickTimer = setTimeout(async () => {
+      tickTimer = null;
+      try { await tick(); } catch (e) { console.log(LOG, 'tick failed:', e && e.message); }
+      scheduleTick();
+    }, nextTickDelay(pace.jitter));
+  }
+
+  function pad2(n) { return String(n).padStart(2, '0'); }
+  function fmtResume(reason, at) {
+    const d = new Date(at);
+    if (reason === 'quota') return pad2(d.getDate()) + '.' + pad2(d.getMonth() + 1) + '.';
+    return pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+  }
+
+  // Applies the caps to the next send. Returns true when the run has to wait.
+  function paceGate() {
+    const r = paceBlocked(events, pace, Date.now());
+    if (!r.blocked) {
+      paused = null;
+      return false;
+    }
+    const label = r.reason === 'hour' ? pace.perHour + '/hour reached'
+      : r.reason === 'day' ? pace.perDay + '/day reached'
+      : pace.stopAtPercent + ' % of the week used';
+    paused = { reason: r.reason, resumeAt: r.resumeAt };
+    updateBadge('⏸ Pace: ' + label + ' · resumes ' + fmtResume(r.reason, r.resumeAt), '#8a4b00');
+    return true;
+  }
+
+  // The options page writes lcPace and the worker writes lcBlock; pick both up
+  // live so a cap set mid-run holds the very next send and a freshly synced
+  // blocklist protects the very next card.
+  if (chrome.storage && chrome.storage.onChanged) {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== 'local') return;
+      if (changes.lcPace) {
+        pace = normalizePace(changes.lcPace.newValue);
+        console.log(LOG, 'Pace settings updated:', pace);
+      }
+      if (changes.lcBlock) {
+        blocked = blockSet(changes.lcBlock.newValue);
+        console.log(LOG, 'ops blocklist updated:', blocked.size, 'profiles');
+      }
+    });
   }
 
   // --- Surviving an extension reload ---------------------------------------
@@ -105,7 +169,7 @@
     if (contextGone) return;
     contextGone = true;
     active = false;
-    if (intervalId) { clearInterval(intervalId); intervalId = null; }
+    clearTick();
     badgeText = '⚠️ Reload this page';
     badgeColor = '#c00';
     quotaSuffix = '';
@@ -448,14 +512,14 @@
     });
     const when = Date.parse(record.ts);
     storageGet(['lcLog', 'lcEvents', 'lcSeen'], (res) => {
-      const events = appendEvent(res.lcEvents, when);
+      const nextEvents = appendEvent(res.lcEvents, when);
       storageSet({
         lcLog: appendRecord(res.lcLog, record, LOG_CAP),
-        lcEvents: events,
+        lcEvents: nextEvents,
         // The durable guard: survives the log's FIFO cap.
         lcSeen: profileId ? addSeen(res.lcSeen, profileId) : (res.lcSeen || [])
       });
-      setQuotaFromEvents(events);
+      setQuotaFromEvents(nextEvents);
     });
     console.log(LOG, 'Logged contact:', record.name || '(no name)', record.profileUrl);
   }
@@ -464,7 +528,7 @@
   function haltRun(reason) {
     halted = reason;
     active = false;
-    if (intervalId) { clearInterval(intervalId); intervalId = null; }
+    clearTick();
     storageSet({ lcHalt: { at: Date.now(), reason, fails: consecutiveFails } });
     updateBadge('⚠️ Stopped: ' + reason, '#c00');
     console.log(LOG, 'Run halted —', reason);
@@ -502,6 +566,8 @@
     }
     stuckDialogTicks = 0;
 
+    if (paceGate()) return;
+
     const connectLink = findNextConnect(processedProfiles);
     if (!connectLink) {
       updateBadge('✅ Active - no buttons', '#555');
@@ -516,6 +582,19 @@
     // Snapshot the card BEFORE sending — on success LinkedIn swaps the card
     // markup out, and then there is nothing left to read about this person.
     const cardInfo = extractCardInfo(connectLink);
+
+    // The back channel: ops closed this person (lost, customer, gone) — walk
+    // past the card. Not a failure, not a send, not a log entry.
+    if (isBlockedUrl(cardInfo.profileUrl, blocked)) {
+      connectLink.setAttribute('data-lc-blocked', '1');
+      const pid = getProfileId(connectLink);
+      if (pid) processedProfiles.add(pid);
+      blockedCount++;
+      pending = false;
+      updateBadge('⛔ ops: do not contact — ' + (cardInfo.name || name).substring(0, 20), '#555');
+      console.log(LOG, 'Skipped (ops blocklist):', cardInfo.name || name, cardInfo.profileUrl);
+      return;
+    }
 
     let profileId = getProfileId(connectLink);
 
@@ -596,7 +675,7 @@
   }
 
   function start() {
-    if (intervalId) return;
+    if (active) return;
     if (contextLost()) { giveUp('start'); return; }
     if (halted) {
       halted = null;
@@ -606,18 +685,17 @@
     active = true;
     pending = false;
     rateLimited = false;
-    intervalId = setInterval(tick, 1500);
+    paused = null;
+    scheduleTick();
     updateBadge('✅ Active (' + count + ' sent)', '#2e7d32');
-    console.log(LOG, 'Started - scanning every 1.5s');
+    console.log(LOG, 'Started - scanning every ~1.5s' + (pace.jitter ? ' (jittered)' : ''));
   }
 
   function stop() {
     active = false;
     pending = false;
-    if (intervalId) {
-      clearInterval(intervalId);
-      intervalId = null;
-    }
+    paused = null;
+    clearTick();
     updateBadge('❌ Paused (' + count + ' sent)', '#333');
     console.log(LOG, 'Stopped');
   }
@@ -628,7 +706,7 @@
       if (msg.enabled) start(); else stop();
       sendResponse({ ok: true });
     } else if (msg.action === 'getStatus') {
-      sendResponse({ active, count, healed: !!learnedRecipe, contextGone, halted });
+      sendResponse({ active, count, healed: !!learnedRecipe, contextGone, halted, paused, blocked: blockedCount });
     } else if (msg.action === 'resetCount') {
       count = 0;
       storageSet({ lcCount: 0 });
@@ -636,7 +714,7 @@
     } else if (msg.action === 'reloadState') {
       // A restore rewrote storage under us — pull the new state into memory so
       // this tab doesn't keep running on the pre-restore counters.
-      storageGet(['lcCount', 'lcRecipe', 'lcLog', 'lcEvents', 'lcSeen'], applyStoredState);
+      storageGet(['lcCount', 'lcRecipe', 'lcLog', 'lcEvents', 'lcSeen', 'lcPace', 'lcBlock'], applyStoredState);
       sendResponse({ ok: true });
     } else if (msg.action === 'clearLog') {
       // Also drop the in-memory guard, otherwise the popup would clear the log
@@ -649,6 +727,9 @@
 
   function applyStoredState(result) {
     count = result.lcCount || 0;
+    pace = normalizePace(result.lcPace);
+    blocked = blockSet(result.lcBlock);
+    if (blocked.size) console.log(LOG, 'ops blocklist:', blocked.size, 'profiles will be skipped');
     if (result.lcRecipe && isUsableRecipe(result.lcRecipe)) {
       learnedRecipe = result.lcRecipe;
       console.log(LOG, 'Restored learned invite recipe from storage');
@@ -670,14 +751,14 @@
     // First run after the upgrade: seed the quota history from the timestamps
     // already in the contact log. Keyed on "undefined", not on "empty" — an
     // empty series is a real state (log cleared) and must not be re-seeded.
-    let events = result.lcEvents;
-    if (events === undefined) {
-      events = backfillEvents(result.lcLog);
-      storageSet({ lcEvents: events });
-      if (events.length) console.log(LOG, 'Seeded quota history with', events.length, 'past requests');
+    let history = result.lcEvents;
+    if (history === undefined) {
+      history = backfillEvents(result.lcLog);
+      storageSet({ lcEvents: history });
+      if (history.length) console.log(LOG, 'Seeded quota history with', history.length, 'past requests');
     }
-    setQuotaFromEvents(events);
+    setQuotaFromEvents(history);
   }
 
-  storageGet(['lcCount', 'lcRecipe', 'lcLog', 'lcEvents', 'lcSeen'], applyStoredState);
+  storageGet(['lcCount', 'lcRecipe', 'lcLog', 'lcEvents', 'lcSeen', 'lcPace', 'lcBlock'], applyStoredState);
 })();

@@ -36,8 +36,16 @@ function setupChrome() {
 const TOKEN = 'ops_' + 'k'.repeat(40);
 const rec = (id) => ({ ts: '2026-09-01T12:00:00.000Z', name: 'P' + id, profileUrl: 'https://www.linkedin.com/in/p' + id, profileId: id, method: 'api' });
 
+// ops answers the import POST and — since 2.12.0 — the blocklist GET.
+let blocklistReply = { norms: ['linkedin.com/in/closed-one'], count: 1, generated_at: 't' };
 function okServer() {
   return async (url, init) => {
+    if ((init.method || 'GET') === 'GET') {
+      fetchCalls.push({ url, auth: init.headers.Authorization, method: 'GET' });
+      if (blocklistReply instanceof Error) throw blocklistReply;
+      if (typeof blocklistReply === 'number') return { ok: false, status: blocklistReply, json: async () => ({}) };
+      return { ok: true, status: 200, json: async () => blocklistReply };
+    }
     const body = JSON.parse(init.body);
     fetchCalls.push({ url, auth: init.headers.Authorization, body });
     return { ok: true, status: 200, json: async () => ({
@@ -72,8 +80,9 @@ describe('background worker: ops sync', () => {
     const handle = await loadWorker();
     const resp = await send(handle, { action: 'opsSync' });
 
-    expect(fetchCalls.length).toBe(1);
-    expect(fetchCalls[0].url).toBe('https://ops.celox.io/api/rainmaker/leads/import/linkedin-spider');
+    const posts = fetchCalls.filter((c) => c.body);
+    expect(posts.length).toBe(1);
+    expect(posts[0].url).toBe('https://ops.celox.io/api/rainmaker/leads/import/linkedin-spider');
     expect(fetchCalls[0].auth).toBe('Bearer ' + TOKEN);
     expect(fetchCalls[0].body.commit).toBe(true);
     expect(resp.ok).toBe(true);
@@ -143,8 +152,9 @@ describe('background worker: ops sync', () => {
     expect(fetchCalls.length).toBe(0);            // debounced, nothing yet
 
     await vi.advanceTimersByTimeAsync(3100);
-    expect(fetchCalls.length).toBe(1);            // one run for the burst
-    expect(fetchCalls[0].body.rows.length).toBe(2);
+    const posts = fetchCalls.filter((c) => c.body);
+    expect(posts.length).toBe(1);                 // one run for the burst
+    expect(posts[0].body.rows.length).toBe(2);
     expect(storage.lcOpsLast.trigger).toBe('auto');
   });
 
@@ -172,7 +182,8 @@ describe('background worker: ops sync', () => {
     storage.lcOps = { baseUrl: 'https://ops.celox.io', token: TOKEN, auto: false };
     storage.lcLog = [rec('A')];
     let release;
-    fetchImpl = (url, init) => new Promise((resolve) => {
+    fetchImpl = (url, init) => new Promise((resolve, reject) => {
+      if (init.method === 'GET') { reject(new Error('no blocklist in this test')); return; }
       const body = JSON.parse(init.body);
       fetchCalls.push({ url, body });
       release = () => resolve({ ok: true, status: 200, json: async () => ({ created: body.rows.length, updated: 0, unchanged: 0, invalid: 0, errors: 0,
@@ -188,6 +199,79 @@ describe('background worker: ops sync', () => {
     await vi.advanceTimersByTimeAsync(10);
     // the queued rerun found nothing pending, so no second request was needed
     expect(fetchCalls.length).toBe(1);
+  });
+});
+
+describe('background worker: ops blocklist (the back channel)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    setupChrome();
+    fetchCalls = [];
+    blocklistReply = { norms: ['linkedin.com/in/closed-one', 'linkedin.com/in/customer'], count: 2, generated_at: 't' };
+    fetchImpl = okServer();
+    globalThis.fetch = vi.fn((...a) => fetchImpl(...a));
+  });
+  afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+
+  it('every sync also fetches the blocklist and stores it under lcBlock', async () => {
+    storage.lcOps = { baseUrl: 'https://ops.celox.io', token: TOKEN, auto: false };
+    storage.lcLog = [rec('A')];
+    const handle = await loadWorker();
+    const resp = await send(handle, { action: 'opsSync' });
+    const gets = fetchCalls.filter((c) => c.method === 'GET');
+    expect(gets.length).toBe(1);
+    expect(gets[0].url).toBe('https://ops.celox.io/api/rainmaker/leads/import/linkedin-spider/blocklist');
+    expect(gets[0].auth).toBe('Bearer ' + TOKEN);
+    expect(storage.lcBlock.norms).toEqual(['linkedin.com/in/closed-one', 'linkedin.com/in/customer']);
+    expect(storage.lcBlock.count).toBe(2);
+    expect(typeof storage.lcBlock.at).toBe('number');
+    expect(resp.ok).toBe(true);
+    expect(resp.blocklist).toEqual({ ok: true, count: 2 });
+    expect(storage.lcOpsLast.blocklist).toEqual({ ok: true, count: 2 });
+  });
+
+  it('a failing blocklist fetch neither fails the sync nor drops the old list', async () => {
+    storage.lcOps = { baseUrl: 'https://ops.celox.io', token: TOKEN, auto: false };
+    storage.lcLog = [rec('A')];
+    storage.lcBlock = { at: 1, norms: ['linkedin.com/in/old'], count: 1 };
+    blocklistReply = 500;
+    const handle = await loadWorker();
+    const resp = await send(handle, { action: 'opsSync' });
+    expect(resp.ok).toBe(true);                          // the push went through
+    expect(storage.lcOpsState.A.status).toBe('ok');
+    expect(storage.lcBlock.norms).toEqual(['linkedin.com/in/old']);
+    expect(resp.blocklist.ok).toBe(false);
+    expect(resp.blocklist.error).toMatch(/500/);
+  });
+
+  it('refreshes the list alone on request — no import POST', async () => {
+    storage.lcOps = { baseUrl: 'https://ops.celox.io', token: TOKEN, auto: false };
+    storage.lcLog = [rec('A')];
+    const handle = await loadWorker();
+    const resp = await send(handle, { action: 'opsBlocklist' });
+    expect(fetchCalls.filter((c) => c.body).length).toBe(0);
+    expect(fetchCalls.filter((c) => c.method === 'GET').length).toBe(1);
+    expect(resp).toEqual({ ok: true, count: 2 });
+    expect(storage.lcBlock.count).toBe(2);
+    expect(storage.lcOpsState).toBeUndefined();          // nothing was pushed
+  });
+
+  it('does not fetch without a configured token', async () => {
+    const handle = await loadWorker();
+    const resp = await send(handle, { action: 'opsBlocklist' });
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(resp.ok).toBe(false);
+    expect(storage.lcBlock).toBeUndefined();
+  });
+
+  it('never stores a payload that is not a blocklist', async () => {
+    storage.lcOps = { baseUrl: 'https://ops.celox.io', token: TOKEN, auto: false };
+    storage.lcBlock = { at: 1, norms: ['linkedin.com/in/old'], count: 1 };
+    blocklistReply = { detail: 'something else entirely' };
+    const handle = await loadWorker();
+    const resp = await send(handle, { action: 'opsBlocklist' });
+    expect(resp.ok).toBe(false);
+    expect(storage.lcBlock.norms).toEqual(['linkedin.com/in/old']);
   });
 });
 

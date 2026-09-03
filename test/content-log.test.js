@@ -7,7 +7,9 @@ let listeners;
 let fetchCalls;
 
 function setupChrome() {
-  storage = {};
+  // These suites step the clock by 1600 ms per tick — pin the fixed beat.
+  // Jitter itself is under test in content-pace.test.js.
+  storage = { lcPace: { jitter: false } };
   listeners = [];
   globalThis.chrome = {
     runtime: {

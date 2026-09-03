@@ -2,13 +2,13 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>LinkedIn Spider — ops sync</title>
+  <title>LinkedIn Spider — settings</title>
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="options.css">
 </head>
 <body class="options">
   <div class="options-wrap">
-    <h1>LinkedIn Spider · celox ops sync</h1>
+    <h1>LinkedIn Spider · settings</h1>
     <p class="lead">
       Every sent connection request can be pushed into <a href="https://ops.celox.io" target="_blank" rel="noopener noreferrer">celox ops</a>
       as a Rainmaker lead with status <em>angeschrieben</em>. ops recognises people already in your pipeline by their
@@ -46,6 +46,37 @@
     </section>
 
     <section class="opt-card">
+      <h2>Pacing</h2>
+      <p class="opt-help">
+        A run scans for the next card about every 1.5 s. <strong>Jitter</strong> varies that gap (0.9–2.1 s) so the
+        run has no fixed beat. The caps pause a run — it resumes by itself when the window has moved on.
+        Empty or 0 = no cap. LinkedIn's own allowance is about 200 invitations per week.
+      </p>
+      <label class="toggle-row opt-toggle">
+        <span class="label">Jitter the interval between requests</span>
+        <span class="switch"><input type="checkbox" id="pace-jitter"><span class="slider"></span></span>
+      </label>
+      <div class="opt-grid">
+        <label class="opt-field">
+          <span>Max. per hour</span>
+          <input type="number" id="pace-hour" min="0" max="200" step="1" placeholder="no cap" inputmode="numeric">
+        </label>
+        <label class="opt-field">
+          <span>Max. per day</span>
+          <input type="number" id="pace-day" min="0" max="200" step="1" placeholder="no cap" inputmode="numeric">
+        </label>
+        <label class="opt-field">
+          <span>Stop at % of the week</span>
+          <input type="number" id="pace-stop" min="0" max="100" step="1" placeholder="no stop" inputmode="numeric">
+        </label>
+      </div>
+      <div class="opt-actions">
+        <button id="pace-save" class="primary-btn">Save pacing</button>
+      </div>
+      <p class="hint" id="pace-hint"></p>
+    </section>
+
+    <section class="opt-card">
       <h2>Status</h2>
       <div class="opt-stats">
         <div><b id="st-synced">0</b><span>synced</span></div>
@@ -61,6 +92,17 @@
         <em>Forget sync state</em> makes every saved contact pending again. Safe: ops deduplicates by profile URL,
         so a second push only refreshes what is missing. Use it after switching ops accounts.
       </p>
+      <h3>Do-not-contact list</h3>
+      <p class="opt-help">
+        ops sends back whom <strong>not</strong> to ask again: leads closed as lost, dormant or won, people who are
+        customers already, and contacts marked as no longer in their role. Only the profile keys travel — no names.
+        A run skips those cards. The list refreshes with every sync.
+      </p>
+      <p class="opt-help" id="st-block">Not fetched yet.</p>
+      <div class="opt-actions">
+        <button id="ops-blocklist" class="reset-btn">Refresh list</button>
+      </div>
+      <p class="hint" id="block-hint"></p>
     </section>
 
     <section class="opt-card">

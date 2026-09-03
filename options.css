@@ -6,12 +6,16 @@ body.options { width: auto; min-height: 100vh; background: #f3f6f8; }
 .options .lead a { color: #0a66c2; }
 .opt-card { background: #fff; border: 1px solid #e6e9ec; border-radius: 10px; padding: 16px 18px; margin-bottom: 14px; }
 .opt-card h2 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; color: #666; margin-bottom: 12px; }
+.opt-card h3 { font-size: 12.5px; font-weight: 600; color: #333; margin: 18px 0 6px; padding-top: 12px; border-top: 1px solid #e6e9ec; }
 .opt-field { display: block; margin-bottom: 10px; }
 .opt-field span { display: block; font-size: 12px; color: #444; margin-bottom: 4px; }
 .opt-field input { width: 100%; padding: 8px 10px; border: 1px solid #d0d5da; border-radius: 6px; font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .opt-field input:focus { outline: 2px solid #0a66c2; outline-offset: 1px; border-color: #0a66c2; }
 .opt-help { font-size: 12px; line-height: 1.45; color: #6a7078; margin: 6px 0 0; }
 .opt-help strong { color: #444; }
+.opt-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
+.opt-grid .opt-field { margin-bottom: 0; }
+@media (max-width: 480px) { .opt-grid { grid-template-columns: 1fr; } }
 .opt-actions { display: flex; gap: 8px; margin-top: 12px; }
 .opt-actions .reset-btn, .opt-actions .primary-btn { width: auto; flex: 0 0 auto; padding: 8px 14px; }
 .opt-toggle { margin-bottom: 0; }

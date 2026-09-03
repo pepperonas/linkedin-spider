@@ -53,7 +53,7 @@ describe('content script: extension context invalidated', () => {
 
   function setupChrome(options) {
     const o = opts = options || {};
-    storage = {};
+    storage = { lcPace: { jitter: false } };   // fixed beat; jitter is tested in content-pace.test.js
     listeners = [];
     globalThis.chrome = {
       runtime: {

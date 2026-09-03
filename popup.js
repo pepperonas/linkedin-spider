@@ -37,11 +37,14 @@ let pollTimer = null;
 let ops = null;            // { baseUrl, token, auto } or null when not set up
 let opsState = {};         // per-contact acknowledgement from ops
 let opsLast = null;        // summary of the last sync run
+let opsBlock = null;       // the do-not-contact list ops sent back (lcBlock)
+let blockedHere = 0;       // cards the tab skipped for ops on this page
 let opsBusy = false;
 
 const VERSION = (chrome.runtime && chrome.runtime.getManifest)
   ? (chrome.runtime.getManifest().version || '') : '';
 let halted = null;         // circuit-breaker reason reported by the tab
+let paused = null;         // { reason, resumeAt } while a pace cap holds the run
 
 // Footer: plain version, or a link to the newer release once one is known
 // (the check itself is opt-in on the options page).
@@ -80,9 +83,28 @@ function updateUI() {
     toggle.checked = enabled;
     return;
   }
+  if (enabled && paused) {
+    // A pace cap from the options page holds the run; it resumes by itself.
+    status.textContent = 'Active · ' + pauseLabel(paused);
+    status.title = 'Pacing (options page): ' + pauseLabel(paused);
+    status.className = 'status active';
+    toggle.checked = true;
+    return;
+  }
   status.textContent = enabled ? 'Active' : 'Paused';
+  status.title = '';
   status.className = 'status ' + (enabled ? 'active' : '');
   toggle.checked = enabled;
+}
+
+function pad2(n) { return String(n).padStart(2, '0'); }
+function pauseLabel(p) {
+  const d = new Date(p.resumeAt);
+  const when = p.reason === 'quota'
+    ? pad2(d.getDate()) + '.' + pad2(d.getMonth() + 1) + '.'
+    : pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+  const what = p.reason === 'hour' ? 'hourly cap' : p.reason === 'day' ? 'daily cap' : 'weekly stop';
+  return what + ' · resumes ' + when;
 }
 
 function say(message, isError) {
@@ -173,7 +195,7 @@ function renderLog() {
 }
 
 function loadState() {
-  chrome.storage.local.get(['lcLog', 'lcEvents', 'lcRange', 'lcOps', 'lcOpsState', 'lcOpsLast', 'lcUpdate'], (result) => {
+  chrome.storage.local.get(['lcLog', 'lcEvents', 'lcRange', 'lcOps', 'lcOpsState', 'lcOpsLast', 'lcUpdate', 'lcBlock'], (result) => {
     renderVersion(result.lcUpdate);
     log = Array.isArray(result.lcLog) ? result.lcLog : [];
     events = LC.normalizeEvents(result.lcEvents);
@@ -181,6 +203,7 @@ function loadState() {
     ops = (result.lcOps && result.lcOps.token) ? result.lcOps : null;
     opsState = (result.lcOpsState && typeof result.lcOpsState === 'object') ? result.lcOpsState : {};
     opsLast = result.lcOpsLast || null;
+    opsBlock = result.lcBlock ? LC.normalizeBlock(result.lcBlock) : null;
     syncChips();
     renderLog();
     renderStats();
@@ -210,9 +233,17 @@ function renderOps() {
     text = 'ops: all synced' + (synced ? ' (' + synced + ')' : '');
     cls = 'ok';
   }
+  if (ops && blockedHere > 0) text += ' · ' + blockedHere + ' skipped';
   opsStatus.textContent = text;
   opsStatus.className = 'ops-status' + (cls ? ' ' + cls : '');
-  opsStatus.title = ops ? ops.baseUrl + (ops.auto ? ' · auto-sync on' : ' · manual') : 'Set up in the extension options';
+  let title = ops ? ops.baseUrl + (ops.auto ? ' · auto-sync on' : ' · manual') : 'Set up in the extension options';
+  if (ops && opsBlock && opsBlock.at) {
+    const d = new Date(opsBlock.at);
+    title += '\ndo-not-contact list from ops: ' + opsBlock.count + ' profiles (refreshed ' +
+      pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ')';
+    if (blockedHere > 0) title += '\n' + blockedHere + ' cards on this page skipped for ops';
+  }
+  opsStatus.title = title;
   opsSyncBtn.disabled = !ops || opsBusy || pending === 0;
 }
 
@@ -447,6 +478,8 @@ async function refreshStatus() {
     tabReachable = true;
     enabled = resp.active;
     halted = resp.halted || null;
+    paused = resp.paused || null;
+    blockedHere = resp.blocked || 0;
     counter.textContent = resp.count;
     if (healed) healed.textContent = resp.healed ? 'self-healed ✓' : 'default';
   } else {

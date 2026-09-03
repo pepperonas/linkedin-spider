@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.11.0-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.12.0-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/github/v/release/pepperonas/linkedin-spider?style=flat-square&label=release" alt="Latest Release">
   <img src="https://img.shields.io/github/release-date/pepperonas/linkedin-spider?style=flat-square&label=released" alt="Release Date">
   <img src="https://img.shields.io/badge/manifest-v3-green?style=flat-square&logo=googlechrome&logoColor=white" alt="Manifest V3">
@@ -48,7 +48,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/tests-439_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-489_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
   <img src="https://img.shields.io/badge/tested_with-Vitest-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest">
   <img src="https://img.shields.io/badge/DOM-jsdom-15a2bb?style=flat-square" alt="jsdom">
   <img src="https://img.shields.io/badge/assertions-mutation--probed-success?style=flat-square" alt="Mutation-probed">
@@ -99,7 +99,8 @@
 1. **[Neueste Version laden](https://github.com/pepperonas/linkedin-spider/releases/latest)**, entpacken, in `chrome://extensions` als entpackte Erweiterung laden (Entwicklermodus).
 2. LinkedIn-Personensuche öffnen, Extension-Icon anklicken, **Auto-Connect** einschalten.
 3. Das Badge unten rechts zeigt den Fortschritt — und immer den Stand des Wochenkontingents (`43/200 wk`).
-4. Kontakte als **CSV** exportieren oder direkt nach **celox ops** übertragen (Popup ⚙ → Token).
+4. Kontakte als **CSV** exportieren oder direkt nach **celox ops** übertragen (Popup ⚙ → Token) — ops sagt zurück, wen die Extension **nicht** mehr anfragen soll.
+5. Tempo auf der Optionsseite zügeln: Jitter, Deckel pro Stunde/Tag, Stopp bei X % der Woche (alles optional).
 
 > **Wichtig nach jedem Update:** Extension-Karte in `chrome://extensions` aktualisieren **und** den offenen LinkedIn-Tab neu laden. Seit 2.9.1 sagt es die Extension selbst (`⚠️ Reload this page`), wenn Sie das vergessen — vorher fiel sie lautlos aus.
 
@@ -154,6 +155,8 @@ Die Selbstheilungs-Schleife: Bricht der API-Pfad → greift der Klick-Fallback �
 - **HTML-Report-Export** — eigenständige Datei mit Chart, Kontingent und Kontakttabelle, ohne externe Assets
 - **Backup & Wiederherstellung** — alle Werte als JSON sichern und zurückspielen; strenger Import
 - **celox-ops-Anbindung** — gesendete Anfragen als Rainmaker-Leads (Status „angeschrieben"), per CSV-Import in ops oder als Push aus der Extension (Service-Worker, optional automatisch)
+- **Rückkanal aus ops** — abgesagte, ruhende und gewonnene Leads, Kunden und veraltete Kontakte kommen als Sperrliste zurück; solche Karten werden auf der Suchseite übersprungen
+- **Tempo-Deckel** (Optionsseite) — Jitter statt festem 1,5-s-Takt (Standard an), optional maximal N pro Stunde / pro Tag und Stopp bei X % des Wochenkontingents; der Lauf pausiert und läuft von selbst weiter
 - **Duplikatsperre über Sessions** — wer einmal im Protokoll steht, wird nie erneut angefragt
 - Visuelles Status-Badge unten rechts auf der Seite, mit Klartext-Hinweis nach einem Extension-Update
 - Erfolgreiche Vernetzungen werden mit 🍻-Emoji markiert — Material-3-Expressive-Physik-Animation (Fall mit Gravitation, Aufprall-Squash, abklingende Bounces) und Custom-Tooltip
@@ -306,8 +309,8 @@ Einrichtung für den Push: in ops unter **Einstellungen → „API-Token für Li
 Token erzeugen (wird genau einmal angezeigt), dann im Popup auf ⚙ → Token eintragen → **Test
 connection** → **Save**. Optional **„Sync automatically"** einschalten.
 
-- Der Token kann in ops **ausschließlich Leads importieren** — nichts lesen, nichts löschen. Er wird
-  nur im Browserprofil gespeichert und geht an keinen anderen Dienst.
+- Der Token kann in ops **ausschließlich Leads importieren und die Sperrliste lesen** — sonst nichts
+  lesen, nichts löschen. Er wird nur im Browserprofil gespeichert und geht an keinen anderen Dienst.
 - Der Sync-Stand liegt in einem eigenen Speicherschlüssel (`lcOpsState`), getrennt vom Protokoll:
   der Worker schreibt nie in `lcLog`, während das Content-Script dort anhängt.
 - Fehlgeschlagene Übertragungen (Netz weg, Token widerrufen) bleiben ausstehend und werden beim
@@ -315,6 +318,41 @@ connection** → **Save**. Optional **„Sync automatically"** einschalten.
   ablehnt (keine LinkedIn-Profil-URL), wird nicht ewig wiederholt.
 - **Was die Extension nicht behaupten kann:** die Annahme einer Anfrage. Sie sieht nur den Versand;
   `connected` setzt man in ops von Hand.
+
+**Rückkanal: ops sagt, wen man nicht mehr anfragt (ab 2.12.0):**
+
+Mit jedem Sync holt der Service-Worker aus ops die **Sperrliste** (`GET …/import/linkedin-spider/blocklist`):
+die normalisierten Profil-Schlüssel aller Leads, die als **verloren, ruhend oder gewonnen** geschlossen
+sind, die mit einem **Kunden verknüpft** sind oder deren Kontakt als **nicht mehr in der Rolle**
+markiert ist. Es reisen nur die Schlüssel (`linkedin.com/in/…`) — keine Namen, Firmen oder Gründe.
+
+- Trifft eine Karte auf der Suchseite die Liste, wird sie **übersprungen**: kein Versand, kein
+  Protokoll-Eintrag, kein Zählen als Fehlschlag. Das Badge sagt `⛔ ops: do not contact — Name`, die
+  Popup-Zeile zählt `· N skipped`.
+- Die Normalisierung ist dieselbe wie in ops (`norm_linkedin`: Schema, `www`/Länder-Subdomain,
+  Tracking-Parameter, Groß-/Kleinschreibung) und mit **denselben Beispielen** gepinnt — driften die
+  beiden, trifft die Liste nicht mehr.
+- Ein fehlgeschlagener Abruf lässt die letzte Liste stehen (veraltet schlägt leer) und macht aus einem
+  gelungenen Push keinen fehlgeschlagenen Sync. Optionsseite → Status → **Refresh list** holt sie von
+  Hand; dort steht auch, wie groß und wie alt sie ist.
+- Eine Änderung greift **sofort**, auch in einem laufenden Tab (`chrome.storage.onChanged`).
+
+**Tempo-Deckel (ab 2.12.0, Optionsseite → Pacing):**
+
+Ein Lauf tastete bisher exakt alle 1,5 s die nächste Karte ab — ein Metronom, das man erkennen kann.
+
+| Einstellung | Standard | Wirkung |
+|---|---|---|
+| **Jitter** | an | Der Abstand zwischen zwei Ticks wird je Tick neu gewürfelt (0,9–2,1 s, ±40 %). Kostet nichts, ändert nichts an der Menge. |
+| **Max. pro Stunde** | aus (0) | Rollierendes 60-Minuten-Fenster über die Zeitstempel (`lcEvents`) — zählt also auch, was vor dem Start dieses Laufs rausging. |
+| **Max. pro Tag** | aus (0) | Kalendertag Ortszeit, Neustart um 00:00. |
+| **Stopp bei % der Woche** | aus (0) | Bezieht sich auf das Wochenkontingent (200). 80 heißt: bei 160 ist Schluss bis Montag. |
+
+Ein Deckel **pausiert** den Lauf, er stoppt ihn nicht: Badge `⏸ Pace: 20/hour reached · resumes 15:40`,
+Popup `Active · hourly cap · resumes 15:40`, der Schalter bleibt an, und sobald das Fenster weiterrückt,
+geht die nächste Anfrage raus. Ein offener Bestätigungsdialog wird auch in der Pause noch
+abgearbeitet. Änderungen greifen ohne Neuladen. Werte außerhalb des Bereichs (0–200 bzw. 0–100)
+werden beim Speichern geklemmt und so angezeigt.
 
 **Footer im Popup:**
 
@@ -329,6 +367,8 @@ Unten im Popup stehen die **Versionsnummer** (SemVer, direkt aus `manifest.json`
 - "🕸️ ❌ Rate-Limit! 60s pause..." (rot) — LinkedIn 429, wartet automatisch
 - "🕸️ ❌ No CSRF Token!" (rot) — API-Fehler
 - "🕸️ ⚠️ Reload this page" (rot) — die Extension wurde aktualisiert, dieser Tab laeuft noch auf dem alten Content-Script. **Seite neu laden**, dann laeuft es weiter
+- "🕸️ ⏸ Pace: 20/hour reached · resumes 15:40" (bernstein) — ein Tempo-Deckel hält den Lauf; er läuft von selbst weiter
+- "🕸️ ⛔ ops: do not contact — Name" (grau) — die Karte steht auf der Sperrliste aus ops und wurde übersprungen
 
 ## Berechtigungen und Daten
 
@@ -364,11 +404,13 @@ Alles liegt in `chrome.storage.local` — also im Chrome-Profil auf Ihrem Rechne
 | `lcHalt` | Grund und Zeitpunkt, wenn der Notstopp (5 Fehlschläge in Folge) den Lauf angehalten hat | erneutes Einschalten |
 | `lcLastApiError` | Letzte Ablehnung durch LinkedIn (Status, erste 300 Zeichen der Antwort) — zur Diagnose auf der Optionsseite | — |
 | `lcUpdate` | Ergebnis des letzten Update-Checks (nur nach Ihrem Klick, höchstens täglich) | — |
+| `lcPace` | Tempo-Einstellungen: Jitter, Deckel pro Stunde/Tag, Stopp bei % der Woche (Standard: Jitter an, keine Deckel) | Optionsseite |
+| `lcBlock` | Die Sperrliste aus ops: normalisierte Profil-Schlüssel (`linkedin.com/in/…`), Anzahl, Abrufzeitpunkt — keine Namen | nächster Sync ersetzt sie |
 
 ### Was den Browser verlässt
 
 - **An LinkedIn:** die Kontaktanfragen selbst (Voyager API) und der Vanity-Lookup — nichts anderes.
-- **An celox ops:** **nur wenn Sie einen Token hinterlegt haben.** Dann die Felder des Kontaktprotokolls (Name, Profil-URL, Headline, Firma, Ort, Kontaktgrad, Profil-ID, Sendeweg, Suchseite, Zeitpunkt) an den Host aus `lcOps.baseUrl`. Der Token berechtigt in ops ausschließlich zum Import.
+- **An celox ops:** **nur wenn Sie einen Token hinterlegt haben.** Dann die Felder des Kontaktprotokolls (Name, Profil-URL, Headline, Firma, Ort, Kontaktgrad, Profil-ID, Sendeweg, Suchseite, Zeitpunkt) an den Host aus `lcOps.baseUrl` — und in Gegenrichtung die Sperrliste (nur Profil-Schlüssel). Der Token berechtigt in ops ausschließlich zum Import und zum Lesen dieser Liste.
 - **An niemanden sonst.** Keine Telemetrie, keine Analytics, kein Update-Check, keine externen Assets in den Exporten.
 - Das Backup-JSON entfernt Session-Header (`csrf-token`, `cookie`, `authorization`) aus dem gespeicherten Recipe, bevor es die Datei schreibt.
 
@@ -379,11 +421,11 @@ Zwei Content-Script-Welten, ein Service-Worker, zwei Oberflächen:
 | Datei | World | Rolle |
 |-------|-------|-------|
 | `interceptor.js` | **MAIN** (`document_start`) | Patcht `fetch`/`XMLHttpRequest`, schneidet LinkedIns Invite-Request mit, schickt das „Recipe" per `postMessage` |
-| `lib.js` | ISOLATED | Reine, testbare Kernfunktionen: Selektoren, Recipe-Bau, Invite-Erkennung, Kontingent-/Chart-Mathematik, SVG-Chart, Backup-Format, ops-Sync-Kern |
-| `content.js` | ISOLATED | Orchestrierung: DOM-Scan, recipe-getriebene API-Calls, Click-Fallback, Recipe-Lernen, Badge, Kontingent-Historie |
-| `background.js` | Service-Worker | ops-Sync: reagiert auf `opsSync`/`opsTest`-Nachrichten und (bei Auto-Sync) auf neue Protokoll-Einträge; die Logik selbst ist `lib.js::opsSyncRun` mit injiziertem `fetch` |
+| `lib.js` | ISOLATED | Reine, testbare Kernfunktionen: Selektoren, Recipe-Bau, Invite-Erkennung, Kontingent-/Chart-Mathematik, SVG-Chart, Backup-Format, ops-Sync-Kern, Tempo-Rechnung, Sperrlisten-Normalisierung |
+| `content.js` | ISOLATED | Orchestrierung: DOM-Scan, recipe-getriebene API-Calls, Click-Fallback, Recipe-Lernen, Badge, Kontingent-Historie, Tempo-Deckel, Sperrlisten-Abgleich |
+| `background.js` | Service-Worker | ops-Sync: reagiert auf `opsSync`/`opsTest`/`opsBlocklist`-Nachrichten und (bei Auto-Sync) auf neue Protokoll-Einträge; holt mit jedem Lauf die Sperrliste; die Logik selbst ist `lib.js::opsSyncRun`/`opsFetchBlocklist` mit injiziertem `fetch` |
 | `popup.html` / `popup.js` | — | Popup-UI: Toggle, Kontingent, Chart, Counter, API-Modus, ops-Zeile, CSV-/HTML-/Backup-Export, Restore, Footer (lädt `lib.js` mit) |
-| `options.html` / `options.js` / `options.css` | — | Optionsseite: ops-URL, API-Token, Auto-Sync, Verbindungstest, Sync-Stand, „Forget sync state" |
+| `options.html` / `options.js` / `options.css` | — | Optionsseite: ops-URL, API-Token, Auto-Sync, Tempo-Deckel, Verbindungstest, Sync-Stand, Sperrliste, „Forget sync state", Update-Check, Diagnose |
 | `styles.css` | — | Popup-Styling |
 | `manifest.json` | — | Chrome Extension Manifest V3 |
 | `icon.png` | — | Extension-Icon |
@@ -395,10 +437,11 @@ Zwei Content-Script-Welten, ein Service-Worker, zwei Oberflächen:
 | Aktion | Richtung | Payload | Antwort |
 |---|---|---|---|
 | `toggle` | Popup → Content-Script | `{ enabled }` | `{ ok }` |
-| `getStatus` | Popup → Content-Script | — | `{ active, count, healed, contextGone }` |
+| `getStatus` | Popup → Content-Script | — | `{ active, count, healed, contextGone, halted, paused, blocked }` |
 | `resetCount` · `clearLog` · `reloadState` | Popup → Content-Script | — | `{ ok }` |
 | `opsSync` | Popup/Optionen → **Service-Worker** | — | `{ ok, summary, error }` |
 | `opsTest` | Optionen → **Service-Worker** | `{ settings: { baseUrl, token } }` | `{ ok, status?, error? }` |
+| `opsBlocklist` | Optionen → **Service-Worker** | — | `{ ok, count?, error? }` — holt die Sperrliste allein, ohne Push |
 | `invite-captured` | `interceptor.js` → Content-Script (`window.postMessage`, nur eigene Origin) | `{ recipe }` | — |
 
 Antwortet der Tab nicht (kein Content-Script, oder nach einem Extension-Update), zeigt das Popup `⚠️ Reload the LinkedIn tab` statt „Paused" und drosselt seine Abfrage von 1 s auf 5 s.
@@ -413,7 +456,7 @@ npx vitest run test/lib.test.js          # eine Datei
 npx vitest run -t "buildInviteRequest"    # ein Test
 ```
 
-**439 Unit- und Integrationstests** mit Vitest + jsdom (Zeitzone in `vitest.config.js` auf `Europe/Berlin` gepinnt — die Kontingent- und Chart-Rechnung ist kalenderlokal, und der Fehler, den naive Millisekunden-Arithmetik erzeugt, existiert nur dort, wo die Uhren wirklich springen):
+**489 Unit- und Integrationstests** mit Vitest + jsdom (Zeitzone in `vitest.config.js` auf `Europe/Berlin` gepinnt — die Kontingent- und Chart-Rechnung ist kalenderlokal, und der Fehler, den naive Millisekunden-Arithmetik erzeugt, existiert nur dort, wo die Uhren wirklich springen):
 
 | Datei | Prüft |
 |---|---|
@@ -428,15 +471,18 @@ npx vitest run -t "buildInviteRequest"    # ein Test
 | `test/resilience.test.js` | Verhalten nach einem Extension-Reload (Badge-Hinweis, Timer abgeräumt, `getStatus` meldet es) + Laufzeit-Deckel für den Backfill |
 | `test/guard.test.js` | Merkliste (`addSeen`/`seenIds`, Deckel), „Ausstehend"-Texte in 7 Sprachen, `isSearchPage`, Versionsvergleich, Release-Payload-Prüfung, Tages-Rhythmus des Update-Checks, `lcSeen` im Backup |
 | `test/content-guard.test.js` | lädt `content.js` echt: `lcSeen` wird geschrieben/gelesen/einmalig befüllt und mit Clear Log geleert, Klick-Erfolg in ES/IT/FR/PT/NL, Notstopp nach 5 Fehlschlägen (nicht die ganze Seite), Erfolg setzt die Strähne zurück, Badge nur auf Suchseiten oder im Lauf |
-| `test/background.test.js` | lädt `background.js` echt: Sync auf Nachricht, Auto-Sync mit Entprellung, kein paralleler Lauf, `lcLog` wird nie angefasst |
+| `test/background.test.js` | lädt `background.js` echt: Sync auf Nachricht, Auto-Sync mit Entprellung, kein paralleler Lauf, `lcLog` wird nie angefasst, Sperrliste mit jedem Lauf (Fehlschlag lässt die alte stehen), `opsBlocklist` allein |
 | `test/popup-export.test.js` | lädt `popup.html` + `popup.js` echt: Export-Download, Abbruch-Verhalten, Zwei-Schritt-Löschen |
-| `test/popup-stats.test.js` | lädt `popup.html` + `popup.js` echt: Kontingent-Anzeige, Chart + Zeitraumwahl, HTML-Report, Backup-/Restore-Roundtrip, unerreichbarer Tab, ops-Zeile, Footer-Links |
-| `test/options.test.js` | lädt `options.html` + `options.js` echt: Validierung, Host-Berechtigung, Verbindungstest, Sync-Stand, zweistufiges Vergessen |
+| `test/popup-stats.test.js` | lädt `popup.html` + `popup.js` echt: Kontingent-Anzeige, Chart + Zeitraumwahl, HTML-Report, Backup-/Restore-Roundtrip, unerreichbarer Tab, ops-Zeile (inkl. Sperrliste + übersprungene Karten), Tempo-Pause im Status, Footer-Links |
+| `test/options.test.js` | lädt `options.html` + `options.js` echt: Validierung, Host-Berechtigung, Verbindungstest, Sync-Stand, zweistufiges Vergessen, Tempo-Formular (Klemmung, Anzeige des Gespeicherten), Sperrlisten-Stand + Refresh |
 | `test/styles.test.js` | Kontrast-Untergrenzen (4,5:1 bzw. 3:1) für Popup, Optionsseite **und** Report-CSS, Layout-Vertrag der Knopfreihe, jede von `popup.js` gesuchte ID existiert im Markup |
 | `test/docs.test.js` | Doku-Wächter: Inhaltsverzeichnis ↔ Überschriften, DE/EN-Parität (Abschnitte, Diagramme, Bilder, Badge-Zahl), jeder Speicherschlüssel und jede Berechtigung dokumentiert, Mindest-Chrome-Version, keine toten Links, Badges gegen Konstanten geprüft |
 | `test/version.test.js` | SemVer, Gleichstand `manifest.json` ↔ `package.json` ↔ README-Badge, Footer-Vertrag, Doku-Integrität (Bildverweise, Alt-Texte, Testliste) |
 | `test/release.test.js` | prüft, dass das Release-ZIP **jeden** Manifest-Einstieg enthält — Content-Scripts, Popup, Service-Worker samt `importScripts`, Optionsseite samt ihrer Assets |
-| `test/content.test.js` · `test/popup.test.js` | ältere Simulations-Tests für Message-Handling und Popup-UI |
+| `test/pace.test.js` | Tempo-Rechnung: Standardwerte, Klemmung, Jitter-Spanne (±40 %), Stunden-/Tages-/Wochen-Deckel mit Wiederanlaufzeit, Reihenfolge der Gründe |
+| `test/content-pace.test.js` | lädt `content.js` echt: gewürfelter Takt (je Tick neu), fester Takt ohne Jitter, Deckel pausieren statt zu stoppen, eigener Versand zählt mit, Änderung greift live, Dialog wird in der Pause noch bedient, `stop()` räumt den Timer ab |
+| `test/blocklist.test.js` | Normalisierung **paritätsgleich zu ops `norm_linkedin`** (dieselben Beispiele), Abgleich, Abruf mit Bearer-Token, Fehler/Fremd-Payload ohne Schreiben, Scan überspringt markierte Karten |
+| `test/content-block.test.js` | lädt `content.js` echt: gesperrte Karte wird übersprungen (kein Versand, kein Protokoll, kein Fehlschlag), auch ohne Profil-ID (die Markierung am Element), Liste greift live, ops-Normalisierung auf der Karte |
 
 ### Testkonventionen
 
@@ -481,6 +527,15 @@ löst `.github/workflows/release.yml` aus: Tests → ZIP → GitHub Release. Die
 | Deploy/Update kommt nicht an | Alte Extension-Version aus dem Cache | `chrome://extensions` → Aktualisieren, Tab neu laden; Version im Popup-Footer prüfen |
 
 ## Changelog
+
+### 2.12.0 — Tempo-Deckel und Rückkanal aus ops
+
+- ✨ **Tempo-Deckel** (Optionsseite → Pacing): **Jitter** statt festem 1,5-s-Takt (Standard an, 0,9–2,1 s), optional **max. N pro Stunde** (rollierende 60 min), **max. N pro Tag** (Kalendertag) und **Stopp bei X % der Woche**. Ein Deckel pausiert den Lauf und lässt ihn von selbst weiterlaufen; Badge und Popup nennen Grund und Wiederanlaufzeit. Einstellungen greifen ohne Neuladen. Die Ticks sind jetzt verkettete `setTimeout`s statt eines `setInterval`
+- ✨ **Rückkanal aus celox ops:** mit jedem Sync holt der Service-Worker die **Sperrliste** (`GET …/import/linkedin-spider/blocklist`, ops ab 1.3.0) — abgesagte/ruhende/gewonnene Leads, Kunden, veraltete Kontakte, nur als normalisierte Profil-Schlüssel. Karten auf der Liste werden übersprungen: kein Versand, kein Protokoll-Eintrag, kein Fehlschlag für den Notstopp. Normalisierung paritätsgleich zu ops und mit denselben Beispielen gepinnt; ein fehlgeschlagener Abruf lässt die alte Liste stehen. Optionsseite zeigt Größe/Alter und hat **Refresh list**
+- ✨ Popup: Tempo-Pause im Status (`Active · hourly cap · resumes 15:40`), übersprungene Karten in der ops-Zeile, Sperrlisten-Stand im Tooltip; `getStatus` trägt `paused` und `blocked`
+- 🧹 Die zwei Simulations-Suiten (content / popup, Stand 2.6) sind gelöscht — sie prüften ihre eigenen Attrappen, nicht die ausgelieferten Dateien; alles darin ist von den Echt-Lade-Suiten abgedeckt
+- 🧪 4 neue Suiten (`pace`, `content-pace`, `blocklist`, `content-block`), jede neue Zusicherung einmal mutiert — u. a. fand eine Probe, dass die Sperr-Markierung am Element nur bei Karten **ohne** Profil-ID trägt (mit ID hätte die Merkliste den Test grün gehalten)
+- 📦 Backup enthält `lcPace`; ein älteres Backup stellt die Standardwerte her
 
 ### 2.11.0 — Dauerhafte Duplikatsperre, Notstopp, Update-Hinweis
 

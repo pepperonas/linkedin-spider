@@ -60,7 +60,8 @@ gehoeren vom Nutzer freigegeben, nicht stillschweigend eingebaut.
 - **A3.3 erledigt** — Actions auf `checkout@v5`/`setup-node@v5`.
 - Neu dazu: `minimum_chrome_version: 102`, Doku-Wächter (`test/docs.test.js`), gemessene Badge-Zahl (`scripts/badges.mjs`).
 - **v2.11.0 erledigt:** A1.1 (pragmatisch: Notstopp nach 5 Fehlschlägen + letzte Ablehnung zur Diagnose — das echte Antwortformat bleibt zu messen), A1.3, A1.4, A1.5 (konservativ: nur Badge-Sichtbarkeit, Verhalten unverändert), A4.1 (opt-in), A5.1, A5.2.
-- Offen: A1.1 endgültig (LinkedIns Limit-Antwort erkennen, sobald `lcLastApiError` sie einmal geliefert hat), A1.2, A2 (Freigabe), A3.2, A3.4, A4.2, B Weg 3.
+- **2.12.0 (2026-09-03): A2 erledigt** (Jitter Standard an, Deckel pro Stunde/Tag + Stopp bei X % Standard aus, alles auf der Optionsseite; pausiert statt zu stoppen), **A3.2 erledigt** (Simulations-Suiten gelöscht, alles echt geladen), **Weg 3 erledigt** (ops 1.3.0 `GET …/blocklist` → `lcBlock` → Karten übersprungen; Normalisierung paritätsgleich gepinnt).
+- Offen: A1.1 endgültig (LinkedIns Limit-Antwort erkennen, sobald `lcLastApiError` sie einmal geliefert hat), A1.2 (bewusst nicht angefasst — Retry-Semantik ohne Feldbeleg zu ändern wäre Risiko ohne Nutzen, der Notstopp begrenzt den Schaden), A3.4 (erst messen), A4.2 (Nutzer-Entscheidung).
 
 ### Empfohlene Reihenfolge fuer Teil A
 

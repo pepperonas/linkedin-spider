@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.11.0-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.12.0-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/github/v/release/pepperonas/linkedin-spider?style=flat-square&label=release" alt="Latest Release">
   <img src="https://img.shields.io/github/release-date/pepperonas/linkedin-spider?style=flat-square&label=released" alt="Release Date">
   <img src="https://img.shields.io/badge/manifest-v3-green?style=flat-square&logo=googlechrome&logoColor=white" alt="Manifest V3">
@@ -48,7 +48,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/tests-439_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-489_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
   <img src="https://img.shields.io/badge/tested_with-Vitest-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest">
   <img src="https://img.shields.io/badge/DOM-jsdom-15a2bb?style=flat-square" alt="jsdom">
   <img src="https://img.shields.io/badge/assertions-mutation--probed-success?style=flat-square" alt="Mutation-probed">
@@ -100,7 +100,8 @@
 1. **[Download the latest release](https://github.com/pepperonas/linkedin-spider/releases/latest)**, unzip, load it as an unpacked extension in `chrome://extensions` (developer mode).
 2. Open a LinkedIn people search, click the extension icon, switch **Auto-Connect** on.
 3. The badge in the bottom right shows progress — and always the weekly quota (`43/200 wk`).
-4. Export contacts as **CSV** or push them straight into **celox ops** (popup ⚙ → token).
+4. Export contacts as **CSV** or push them straight into **celox ops** (popup ⚙ → token) — ops tells the extension whom **not** to ask again.
+5. Rein in the pace on the options page: jitter, hourly/daily caps, stop at X % of the week (all optional).
 
 > **Important after every update:** refresh the extension card in `chrome://extensions` **and** reload the open LinkedIn tab. Since 2.9.1 the extension tells you itself (`⚠️ Reload this page`) if you forget — before that it failed silently.
 
@@ -155,6 +156,8 @@ The self-healing loop: the API path breaks → the click fallback kicks in → L
 - **HTML report export** — a self-contained file with the chart, the quota and the contact table, no external assets
 - **Backup & restore** — export and re-import every stored value as JSON; strict import
 - **celox ops integration** — sent requests as Rainmaker leads (status "contacted"), via CSV import in ops or pushed from the extension (service worker, optionally automatic)
+- **Back channel from ops** — lost, dormant and won leads, customers and stale contacts come back as a do-not-contact list; such cards are skipped on the search page
+- **Pacing** (options page) — jitter instead of a fixed 1.5-s beat (on by default), optionally at most N per hour / per day and a stop at X % of the weekly allowance; the run pauses and resumes by itself
 - **Cross-session duplicate guard** — anyone in the log is never asked again
 - Visual status badge in the bottom right of the page, with a plain-language notice after an extension update
 - Successful connections are marked with a 🍻 emoji — Material 3 Expressive physics animation (gravity drop, impact squash, decaying bounces) and a custom tooltip
@@ -306,14 +309,45 @@ Setup for the push: in ops under **Einstellungen → "API-Token für LinkedIn Sp
 (shown exactly once), then in the popup click ⚙ → paste the token → **Test connection** → **Save**.
 Optionally enable **"Sync automatically"**.
 
-- In ops the token can **only import leads** — it cannot read, change or delete anything. It is stored
-  in this browser profile only and is never sent anywhere else.
+- In ops the token can **only import leads and read the do-not-contact list** — it cannot read, change
+  or delete anything else. It is stored in this browser profile only and is never sent anywhere else.
 - The sync state lives in its own storage key (`lcOpsState`), apart from the log: the worker never
   writes `lcLog` while the content script is appending to it.
 - Failed pushes (network down, token revoked) stay pending and are retried on the next sync; the error
   is shown in the popup row. What ops rejects as invalid (no LinkedIn profile URL) is not retried forever.
 - **What the extension cannot claim:** that a request was accepted. It only sees the send; `connected`
   is set by hand in ops.
+
+**Back channel: ops says whom not to ask again (from 2.12.0):**
+
+With every sync the service worker fetches the **do-not-contact list** from ops
+(`GET …/import/linkedin-spider/blocklist`): the normalised profile keys of every lead closed as **lost,
+dormant or won**, linked to a **customer**, or whose contact is marked as **no longer in the role**. Only
+the keys travel (`linkedin.com/in/…`) — no names, companies or reasons.
+
+- When a card on the search page hits the list it is **skipped**: no send, no log entry, no failure for the
+  circuit breaker. The badge reads `⛔ ops: do not contact — Name`, the popup row counts `· N skipped`.
+- The normalisation is the one ops uses (`norm_linkedin`: scheme, `www`/country subdomain, tracking
+  parameters, case) and is pinned with **the same examples** — if the two drift, the list stops matching.
+- A failed fetch keeps the last list (stale beats empty) and never turns a successful push into a failed
+  sync. Options page → Status → **Refresh list** fetches it by hand; size and age are shown there too.
+- A change takes effect **immediately**, even in a running tab (`chrome.storage.onChanged`).
+
+**Pacing (from 2.12.0, options page → Pacing):**
+
+A run used to probe for the next card exactly every 1.5 s — a metronome you can recognise.
+
+| Setting | Default | Effect |
+|---|---|---|
+| **Jitter** | on | The gap between two ticks is rolled anew each tick (0.9–2.1 s, ±40 %). Costs nothing, changes nothing about the volume. |
+| **Max. per hour** | off (0) | Rolling 60-minute window over the timestamps (`lcEvents`) — so it also counts what went out before this run started. |
+| **Max. per day** | off (0) | Local calendar day, resets at 00:00. |
+| **Stop at % of the week** | off (0) | Relative to the weekly allowance (200). 80 means: at 160 it waits until Monday. |
+
+A cap **pauses** the run, it does not stop it: badge `⏸ Pace: 20/hour reached · resumes 15:40`, popup
+`Active · hourly cap · resumes 15:40`, the toggle stays on, and as soon as the window moves on the next
+request goes out. An open confirm dialog is still handled during the pause. Changes apply without a
+reload. Values outside the range (0–200 or 0–100) are clamped on save and shown as stored.
 
 **Popup footer:**
 
@@ -328,6 +362,8 @@ The bottom of the popup carries the **version number** (SemVer, read straight fr
 - "🕸️ ❌ Rate-Limit! 60s pause..." (red) — LinkedIn 429, waiting automatically
 - "🕸️ ❌ No CSRF Token!" (red) — API error
 - "🕸️ ⚠️ Reload this page" (red) — the extension was updated and this tab still runs the old content script. **Reload the page** and it continues
+- "🕸️ ⏸ Pace: 20/hour reached · resumes 15:40" (amber) — a pacing cap holds the run; it resumes by itself
+- "🕸️ ⛔ ops: do not contact — Name" (grey) — the card is on the do-not-contact list from ops and was skipped
 
 ## Permissions and data
 
@@ -363,11 +399,13 @@ Everything lives in `chrome.storage.local` — in the Chrome profile on your mac
 | `lcHalt` | Reason and time when the circuit breaker (5 failures in a row) stopped the run | switching on again |
 | `lcLastApiError` | LinkedIn's last rejection (status, first 300 characters of the reply) — for diagnosis on the options page | — |
 | `lcUpdate` | Result of the last update check (only after your click, at most daily) | — |
+| `lcPace` | Pacing settings: jitter, hourly/daily caps, stop at % of the week (default: jitter on, no caps) | options page |
+| `lcBlock` | The do-not-contact list from ops: normalised profile keys (`linkedin.com/in/…`), count, fetch time — no names | replaced by the next sync |
 
 ### What leaves the browser
 
 - **To LinkedIn:** the connection requests themselves (Voyager API) and the vanity lookup — nothing else.
-- **To celox ops:** **only if you have stored a token.** Then the contact-log fields (name, profile URL, headline, company, location, degree, profile ID, send path, search page, time) to the host in `lcOps.baseUrl`. In ops the token authorises the import and nothing else.
+- **To celox ops:** **only if you have stored a token.** Then the contact-log fields (name, profile URL, headline, company, location, degree, profile ID, send path, search page, time) to the host in `lcOps.baseUrl` — and, the other way, the do-not-contact list (profile keys only). In ops the token authorises the import and reading that list, nothing else.
 - **To nobody else.** No telemetry, no analytics, no update check, no external assets in the exports.
 - The backup JSON strips session headers (`csrf-token`, `cookie`, `authorization`) from the stored recipe before writing the file.
 
@@ -378,11 +416,11 @@ Two content-script worlds, one service worker, two surfaces:
 | File | World | Role |
 |------|-------|------|
 | `interceptor.js` | **MAIN** (`document_start`) | Patches `fetch`/`XMLHttpRequest`, captures LinkedIn's invite request, posts the "recipe" via `postMessage` |
-| `lib.js` | ISOLATED | Pure, testable core functions: selectors, recipe building, invite detection, quota/chart maths, SVG chart, backup format, ops sync core |
-| `content.js` | ISOLATED | Orchestration: DOM scan, recipe-driven API calls, click fallback, recipe learning, badge, quota history |
-| `background.js` | service worker | ops sync: answers `opsSync`/`opsTest` messages and (with auto-sync) reacts to new log entries; the logic itself is `lib.js::opsSyncRun` with `fetch` injected |
+| `lib.js` | ISOLATED | Pure, testable core functions: selectors, recipe building, invite detection, quota/chart maths, SVG chart, backup format, ops sync core, pacing maths, blocklist normalisation |
+| `content.js` | ISOLATED | Orchestration: DOM scan, recipe-driven API calls, click fallback, recipe learning, badge, quota history, pacing, blocklist matching |
+| `background.js` | service worker | ops sync: answers `opsSync`/`opsTest`/`opsBlocklist` messages and (with auto-sync) reacts to new log entries; fetches the do-not-contact list with every run; the logic itself is `lib.js::opsSyncRun`/`opsFetchBlocklist` with `fetch` injected |
 | `popup.html` / `popup.js` | — | Popup UI: toggle, quota, chart, counter, API mode, ops row, CSV/HTML/backup export, restore, footer (loads `lib.js` too) |
-| `options.html` / `options.js` / `options.css` | — | Options page: ops URL, API token, auto-sync, connection test, sync state, "Forget sync state" |
+| `options.html` / `options.js` / `options.css` | — | Options page: ops URL, API token, auto-sync, pacing, connection test, sync state, do-not-contact list, "Forget sync state", update check, diagnostics |
 | `styles.css` | — | Popup styling |
 | `manifest.json` | — | Chrome Extension Manifest V3 |
 | `icon.png` | — | Extension icon |
@@ -394,10 +432,11 @@ Two content-script worlds, one service worker, two surfaces:
 | Action | Direction | Payload | Response |
 |---|---|---|---|
 | `toggle` | popup → content script | `{ enabled }` | `{ ok }` |
-| `getStatus` | popup → content script | — | `{ active, count, healed, contextGone }` |
+| `getStatus` | popup → content script | — | `{ active, count, healed, contextGone, halted, paused, blocked }` |
 | `resetCount` · `clearLog` · `reloadState` | popup → content script | — | `{ ok }` |
 | `opsSync` | popup/options → **service worker** | — | `{ ok, summary, error }` |
 | `opsTest` | options → **service worker** | `{ settings: { baseUrl, token } }` | `{ ok, status?, error? }` |
+| `opsBlocklist` | options → **service worker** | — | `{ ok, count?, error? }` — fetches the do-not-contact list alone, no push |
 | `invite-captured` | `interceptor.js` → content script (`window.postMessage`, own origin only) | `{ recipe }` | — |
 
 If the tab does not answer (no content script, or after an extension update), the popup shows `⚠️ Reload the LinkedIn tab` instead of "Paused" and backs its polling off from 1 s to 5 s.
@@ -412,7 +451,7 @@ npx vitest run test/lib.test.js          # one file
 npx vitest run -t "buildInviteRequest"    # one test
 ```
 
-**439 unit and integration tests** with Vitest + jsdom (the timezone is pinned to `Europe/Berlin` in `vitest.config.js` — the quota and chart maths are calendar-local, and the bug naive millisecond arithmetic causes only exists where clocks actually shift):
+**489 unit and integration tests** with Vitest + jsdom (the timezone is pinned to `Europe/Berlin` in `vitest.config.js` — the quota and chart maths are calendar-local, and the bug naive millisecond arithmetic causes only exists where clocks actually shift):
 
 | File | Checks |
 |---|---|
@@ -427,15 +466,18 @@ npx vitest run -t "buildInviteRequest"    # one test
 | `test/resilience.test.js` | behaviour after an extension reload (badge notice, timer torn down, `getStatus` reports it) + a runtime cap on the backfill |
 | `test/guard.test.js` | seen-list (`addSeen`/`seenIds`, cap), "pending" texts in 7 languages, `isSearchPage`, version comparison, release-payload validation, daily rhythm of the update check, `lcSeen` in the backup |
 | `test/content-guard.test.js` | loads `content.js` for real: `lcSeen` is written/read/seeded once and cleared with Clear Log, click success in ES/IT/FR/PT/NL, circuit breaker after 5 failures (not the whole page), a success resets the streak, badge only on search pages or during a run |
-| `test/background.test.js` | loads `background.js` for real: sync on message, debounced auto-sync, never two runs at once, `lcLog` is never touched |
+| `test/background.test.js` | loads `background.js` for real: sync on message, debounced auto-sync, never two runs at once, `lcLog` is never touched, do-not-contact list with every run (a failure keeps the old one), `opsBlocklist` alone |
 | `test/popup-export.test.js` | loads `popup.html` + `popup.js` for real: export download, cancel behaviour, two-step clear |
-| `test/popup-stats.test.js` | loads `popup.html` + `popup.js` for real: quota display, chart + period selection, HTML report, backup/restore round-trip, unreachable tab, ops row, footer links |
-| `test/options.test.js` | loads `options.html` + `options.js` for real: validation, host permission, connection test, sync state, two-step forget |
+| `test/popup-stats.test.js` | loads `popup.html` + `popup.js` for real: quota display, chart + period selection, HTML report, backup/restore round-trip, unreachable tab, ops row (incl. do-not-contact list + skipped cards), pacing pause in the status, footer links |
+| `test/options.test.js` | loads `options.html` + `options.js` for real: validation, host permission, connection test, sync state, two-step forget, pacing form (clamping, shows what was stored), do-not-contact list state + refresh |
 | `test/styles.test.js` | contrast floors (4.5:1 / 3:1) for the popup, the options page **and** the report stylesheet, button-row layout contract, every id `popup.js` reaches for exists in the markup |
 | `test/docs.test.js` | documentation guards: table of contents ↔ headings, DE/EN parity (sections, diagrams, images, badge count), every storage key and every permission documented, minimum Chrome version, no dead links, badges checked against constants |
 | `test/version.test.js` | SemVer, parity between `manifest.json`, `package.json` and the README badge, footer contract, documentation integrity (image references, alt text, test list) |
 | `test/release.test.js` | checks the release ZIP contains **every** manifest entry point — content scripts, popup, service worker including `importScripts`, options page including its assets |
-| `test/content.test.js` · `test/popup.test.js` | older simulation tests for message handling and the popup UI |
+| `test/pace.test.js` | pacing maths: defaults, clamping, jitter range (±40 %), hourly/daily/weekly caps with resume time, order of reasons |
+| `test/content-pace.test.js` | loads `content.js` for real: rolled beat (anew each tick), fixed beat without jitter, caps pause instead of halting, the run's own sends count, changes apply live, a dialog is still handled while paused, `stop()` clears the timer |
+| `test/blocklist.test.js` | normalisation **at parity with ops `norm_linkedin`** (the same examples), matching, fetch with bearer token, errors/foreign payload write nothing, the scan skips marked cards |
+| `test/content-block.test.js` | loads `content.js` for real: a blocked card is skipped (no send, no log entry, no failure), also without a profile id (the mark on the element), the list applies live, ops normalisation on the card |
 
 ### Testing conventions
 
@@ -480,6 +522,15 @@ triggers `.github/workflows/release.yml`: tests → ZIP → GitHub Release. The 
 | Update does not arrive | Old extension version cached | `chrome://extensions` → Update, reload the tab; check the version in the popup footer |
 
 ## Changelog
+
+### 2.12.0 — Pacing and the back channel from ops
+
+- ✨ **Pacing** (options page → Pacing): **jitter** instead of a fixed 1.5-s beat (on by default, 0.9–2.1 s), optionally **max. N per hour** (rolling 60 min), **max. N per day** (calendar day) and **stop at X % of the week**. A cap pauses the run and lets it resume by itself; badge and popup name the reason and the resume time. Settings apply without a reload. Ticks are chained `setTimeout`s now instead of a `setInterval`
+- ✨ **Back channel from celox ops:** with every sync the service worker fetches the **do-not-contact list** (`GET …/import/linkedin-spider/blocklist`, ops 1.3.0+) — lost/dormant/won leads, customers, stale contacts, as normalised profile keys only. Cards on the list are skipped: no send, no log entry, no failure for the circuit breaker. Normalisation at parity with ops and pinned with the same examples; a failed fetch keeps the old list. The options page shows size/age and has **Refresh list**
+- ✨ Popup: pacing pause in the status (`Active · hourly cap · resumes 15:40`), skipped cards in the ops row, list state in the tooltip; `getStatus` carries `paused` and `blocked`
+- 🧹 The two simulation suites (content / popup, from 2.6) are gone — they tested their own stand-ins, not the shipped files; everything in them is covered by the real-load suites
+- 🧪 4 new suites (`pace`, `content-pace`, `blocklist`, `content-block`), every new assertion mutated once — one probe found that the block mark on the element only matters for cards **without** a profile id (with an id the seen-list would have kept the test green)
+- 📦 The backup carries `lcPace`; an older backup restores the defaults
 
 ### 2.11.0 — Durable duplicate guard, circuit breaker, update notice
 

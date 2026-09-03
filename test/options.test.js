@@ -286,3 +286,101 @@ describe('options page contract', () => {
     expect(js).not.toMatch(/['"]\d+\.\d+\.\d+['"]/);
   });
 });
+
+describe('options page: pacing', () => {
+  beforeEach(() => { mountOptions(); setupChrome(); });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it('shows the defaults: jitter on, every cap empty (= off)', async () => {
+    await loadOptions();
+    expect($('pace-jitter').checked).toBe(true);
+    expect($('pace-hour').value).toBe('');
+    expect($('pace-day').value).toBe('');
+    expect($('pace-stop').value).toBe('');
+  });
+
+  it('reads stored settings back into the form', async () => {
+    storage.lcPace = { jitter: false, perHour: 20, perDay: 60, stopAtPercent: 90 };
+    await loadOptions();
+    expect($('pace-jitter').checked).toBe(false);
+    expect($('pace-hour').value).toBe('20');
+    expect($('pace-day').value).toBe('60');
+    expect($('pace-stop').value).toBe('90');
+  });
+
+  it('saves normalized values under lcPace and says so', async () => {
+    await loadOptions();
+    $('pace-jitter').checked = false;
+    $('pace-hour').value = '25';
+    $('pace-day').value = '';
+    $('pace-stop').value = '80';
+    $('pace-save').click();
+    await flush();
+    expect(storage.lcPace).toEqual({ jitter: false, perHour: 25, perDay: 0, stopAtPercent: 80 });
+    expect($('pace-hint').textContent).toMatch(/Saved/);
+  });
+
+  it('clamps junk instead of storing it', async () => {
+    await loadOptions();
+    $('pace-hour').value = '-5';
+    $('pace-day').value = '9999';
+    $('pace-stop').value = '150';
+    $('pace-save').click();
+    await flush();
+    expect(storage.lcPace).toEqual({ jitter: true, perHour: 0, perDay: 200, stopAtPercent: 100 });
+    expect($('pace-day').value).toBe('200');   // the form shows what was actually stored
+    expect($('pace-stop').value).toBe('100');
+  });
+
+  it('the number fields carry the same bounds the code enforces', () => {
+    mountOptions();
+    expect($('pace-hour').max).toBe('200');
+    expect($('pace-day').max).toBe('200');
+    expect($('pace-stop').max).toBe('100');
+    for (const id of ['pace-hour', 'pace-day', 'pace-stop']) expect($(id).min).toBe('0');
+  });
+});
+
+describe('options page: the do-not-contact list from ops', () => {
+  beforeEach(() => { mountOptions(); setupChrome(); });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it('shows the size and age of the list', async () => {
+    storage.lcOps = { baseUrl: 'https://ops.celox.io', token: TOKEN, auto: false };
+    storage.lcBlock = { at: new Date(2026, 8, 3, 14, 5).getTime(), norms: ['linkedin.com/in/a', 'linkedin.com/in/b', 'linkedin.com/in/c'], count: 3 };
+    await loadOptions();
+    expect($('st-block').textContent).toMatch(/3 profiles/);
+    expect($('st-block').textContent).toMatch(/03\.09\.2026/);
+    expect($('ops-blocklist').disabled).toBe(false);
+  });
+
+  it('says when there is no list yet, and keeps the button off without a token', async () => {
+    await loadOptions();
+    expect($('st-block').textContent).toMatch(/not fetched yet/i);
+    expect($('ops-blocklist').disabled).toBe(true);
+  });
+
+  it('Refresh asks the worker and shows the fresh count', async () => {
+    storage.lcOps = { baseUrl: 'https://ops.celox.io', token: TOKEN, auto: false };
+    workerReply = (msg) => {
+      if (msg.action === 'opsBlocklist') { storage.lcBlock = { at: Date.now(), norms: ['linkedin.com/in/a'], count: 1 }; return { ok: true, count: 1 }; }
+      return { ok: true };
+    };
+    await loadOptions();
+    $('ops-blocklist').click();
+    await flush();
+    expect(workerMessages.some((m) => m.action === 'opsBlocklist')).toBe(true);
+    expect($('st-block').textContent).toMatch(/1 profile/);
+    expect($('block-hint').textContent).toMatch(/1 profile/);
+  });
+
+  it('a failed refresh is said out loud', async () => {
+    storage.lcOps = { baseUrl: 'https://ops.celox.io', token: TOKEN, auto: false };
+    workerReply = { ok: false, error: 'ops answered 401' };
+    await loadOptions();
+    $('ops-blocklist').click();
+    await flush();
+    expect($('block-hint').textContent).toMatch(/401/);
+    expect($('block-hint').className).toMatch(/error/);
+  });
+});

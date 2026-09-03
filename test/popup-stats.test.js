@@ -458,6 +458,29 @@ describe('popup: ops sync row', () => {
     expect(document.getElementById('ops-status').textContent).toBe('ops: all synced (2)');
   });
 
+  it('tells how many profiles ops has closed — in the tooltip, the row stays one line', async () => {
+    storage.lcOps = { baseUrl: 'https://ops.celox.io', token: TOKEN };
+    storage.lcLog = [rec('A')];
+    storage.lcOpsState = { A: { status: 'ok' } };
+    storage.lcBlock = { at: new Date(2026, 8, 3, 14, 5).getTime(), norms: ['linkedin.com/in/x', 'linkedin.com/in/y'], count: 2 };
+    await loadPopup();
+    const st = document.getElementById('ops-status');
+    expect(st.textContent).toBe('ops: all synced (1)');          // unchanged
+    expect(st.title).toMatch(/do-not-contact.*2 profiles/);
+    expect(st.title).toMatch(/14:05/);
+  });
+
+  it('shows how many cards the tab skipped for ops', async () => {
+    chrome.tabs.sendMessage = (_id, msg, cb) => { sentMessages.push(msg); if (cb) cb(msg.action === 'getStatus'
+      ? { active: true, count: 7, healed: false, contextGone: false, halted: null, paused: null, blocked: 3 } : { ok: true }); };
+    storage.lcOps = { baseUrl: 'https://ops.celox.io', token: TOKEN };
+    storage.lcLog = [rec('A')];
+    storage.lcOpsState = { A: { status: 'ok' } };
+    await loadPopup();
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(document.getElementById('ops-status').textContent).toBe('ops: all synced (1) · 3 skipped');
+  });
+
   it('never sends the token to the tab — only storage and the worker see it', async () => {
     storage.lcOps = { baseUrl: 'https://ops.celox.io', token: TOKEN };
     storage.lcLog = [rec('A')];
@@ -504,6 +527,36 @@ describe('popup: update notice + halt + hints', () => {
     expect(st.textContent).toMatch(/stopped/i);
     expect(st.textContent).toMatch(/5 failures/);
     expect(st.className).toMatch(/warn/);
+  });
+
+  it('shows a pace pause as "Active · paused" with the reason and resume time', async () => {
+    const resumeAt = new Date(2026, 8, 3, 15, 40).getTime();
+    chrome.tabs.sendMessage = (_id, msg, cb) => { sentMessages.push(msg); if (cb) cb(msg.action === 'getStatus'
+      ? { active: true, count: 7, healed: false, contextGone: false, halted: null, paused: { reason: 'hour', resumeAt } } : { ok: true }); };
+    await loadPopup();
+    await vi.advanceTimersByTimeAsync(1100);
+    const st = document.getElementById('status');
+    expect(st.textContent).toMatch(/hourly cap/);
+    expect(st.textContent).toMatch(/15:40/);
+    expect(st.className).toMatch(/active/);          // the run is on, just waiting
+    expect(document.getElementById('toggle').checked).toBe(true);
+  });
+
+  it('names the daily cap and the weekly stop differently', async () => {
+    const day = new Date(2026, 8, 4, 0, 0).getTime();
+    const week = new Date(2026, 8, 7, 0, 0).getTime();
+    let paused = { reason: 'day', resumeAt: day };
+    chrome.tabs.sendMessage = (_id, msg, cb) => { sentMessages.push(msg); if (cb) cb(msg.action === 'getStatus'
+      ? { active: true, count: 7, healed: false, contextGone: false, halted: null, paused } : { ok: true }); };
+    await loadPopup();
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(document.getElementById('status').textContent).toMatch(/daily cap.*00:00/);
+    paused = { reason: 'quota', resumeAt: week };
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(document.getElementById('status').textContent).toMatch(/weekly stop.*07\.09\./);
+    paused = null;
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(document.getElementById('status').textContent).toBe('Active');
   });
 
   it('tells where the history starts when it is younger than the period', async () => {
