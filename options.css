@@ -1,0 +1,22 @@
+/* Options page: the popup stylesheet plus a wider, calmer page frame. */
+body.options { width: auto; min-height: 100vh; background: #f3f6f8; }
+.options-wrap { max-width: 560px; margin: 0 auto; padding: 28px 20px 40px; }
+.options h1 { margin-bottom: 8px; }
+.options .lead { font-size: 13px; line-height: 1.5; color: #444; margin-bottom: 18px; }
+.options .lead a { color: #0a66c2; }
+.opt-card { background: #fff; border: 1px solid #e6e9ec; border-radius: 10px; padding: 16px 18px; margin-bottom: 14px; }
+.opt-card h2 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; color: #666; margin-bottom: 12px; }
+.opt-field { display: block; margin-bottom: 10px; }
+.opt-field span { display: block; font-size: 12px; color: #444; margin-bottom: 4px; }
+.opt-field input { width: 100%; padding: 8px 10px; border: 1px solid #d0d5da; border-radius: 6px; font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.opt-field input:focus { outline: 2px solid #0a66c2; outline-offset: 1px; border-color: #0a66c2; }
+.opt-help { font-size: 12px; line-height: 1.45; color: #6a7078; margin: 6px 0 0; }
+.opt-help strong { color: #444; }
+.opt-actions { display: flex; gap: 8px; margin-top: 12px; }
+.opt-actions .reset-btn, .opt-actions .primary-btn { width: auto; flex: 0 0 auto; padding: 8px 14px; }
+.opt-toggle { margin-bottom: 0; }
+.opt-stats { display: flex; gap: 8px; margin-bottom: 6px; }
+.opt-stats div { flex: 1; text-align: center; border: 1px solid #e6e9ec; border-radius: 8px; padding: 8px 4px; }
+.opt-stats b { display: block; font-size: 18px; color: #0a66c2; }
+.opt-stats span { font-size: 10px; color: #6a7078; }
+.options .footer { margin-top: 20px; }

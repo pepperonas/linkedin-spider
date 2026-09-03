@@ -396,6 +396,84 @@ describe('popup: unreachable tab', () => {
   });
 });
 
+describe('popup: ops sync row', () => {
+  let workerMessages, workerReply;
+  beforeEach(() => {
+    vi.useFakeTimers(); mountPopup(); setupChrome(); readerText = null; globalThis.FileReader = SyncFileReader;
+    workerMessages = []; workerReply = { ok: true, summary: { sent: 2, created: 2, updated: 0, unchanged: 0 } };
+    chrome.runtime.sendMessage = (msg, cb) => { workerMessages.push(msg); if (cb) cb(workerReply); };
+    chrome.runtime.openOptionsPage = vi.fn();
+  });
+  afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+
+  const TOKEN = 'ops_' + 'p'.repeat(40);
+  const rec = (id) => ({ ...contact, profileId: id, profileUrl: 'https://www.linkedin.com/in/' + id });
+
+  it('says so when ops is not set up, and keeps Sync disabled', async () => {
+    storage.lcLog = [rec('A')];
+    await loadPopup();
+    expect(document.getElementById('ops-status').textContent).toMatch(/not set up/);
+    expect(document.getElementById('ops-sync').disabled).toBe(true);
+  });
+
+  it('counts what is still pending', async () => {
+    storage.lcOps = { baseUrl: 'https://ops.celox.io', token: TOKEN };
+    storage.lcLog = [rec('A'), rec('B'), rec('C')];
+    storage.lcOpsState = { A: { status: 'ok' } };
+    await loadPopup();
+    const st = document.getElementById('ops-status');
+    expect(st.textContent).toBe('ops: 2 pending · 1 synced');
+    expect(st.className).toMatch(/pending/);
+    expect(document.getElementById('ops-sync').disabled).toBe(false);
+  });
+
+  it('reports all synced and disables the button when nothing is pending', async () => {
+    storage.lcOps = { baseUrl: 'https://ops.celox.io', token: TOKEN };
+    storage.lcLog = [rec('A')];
+    storage.lcOpsState = { A: { status: 'ok' } };
+    await loadPopup();
+    expect(document.getElementById('ops-status').textContent).toBe('ops: all synced (1)');
+    expect(document.getElementById('ops-sync').disabled).toBe(true);
+  });
+
+  it('surfaces the last error instead of hiding it', async () => {
+    storage.lcOps = { baseUrl: 'https://ops.celox.io', token: TOKEN };
+    storage.lcLog = [rec('A')];
+    storage.lcOpsLast = { at: 1, error: 'ops answered 401: API-Token ungültig oder widerrufen' };
+    await loadPopup();
+    const st = document.getElementById('ops-status');
+    expect(st.textContent).toMatch(/401/);
+    expect(st.className).toMatch(/error/);
+  });
+
+  it('Sync asks the worker, then re-reads the state', async () => {
+    storage.lcOps = { baseUrl: 'https://ops.celox.io', token: TOKEN };
+    storage.lcLog = [rec('A'), rec('B')];
+    await loadPopup();
+    workerReply = (() => { storage.lcOpsState = { A: { status: 'ok' }, B: { status: 'ok' } }; return { ok: true, summary: { sent: 2, created: 2, updated: 0, unchanged: 0 } }; })();
+    document.getElementById('ops-sync').click();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(workerMessages.some((m) => m.action === 'opsSync')).toBe(true);
+    expect(document.getElementById('hint').textContent).toMatch(/2 sent/);
+    expect(document.getElementById('ops-status').textContent).toBe('ops: all synced (2)');
+  });
+
+  it('never sends the token to the tab — only storage and the worker see it', async () => {
+    storage.lcOps = { baseUrl: 'https://ops.celox.io', token: TOKEN };
+    storage.lcLog = [rec('A')];
+    await loadPopup();
+    document.getElementById('ops-sync').click();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(JSON.stringify(sentMessages)).not.toContain(TOKEN);   // tabs.sendMessage traffic
+  });
+
+  it('the gear opens the options page', async () => {
+    await loadPopup();
+    document.getElementById('ops-settings').click();
+    expect(chrome.runtime.openOptionsPage).toHaveBeenCalled();
+  });
+});
+
 describe('popup: footer', () => {
   beforeEach(() => { vi.useFakeTimers(); mountPopup(); setupChrome(); readerText = null; globalThis.FileReader = SyncFileReader; });
   afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });

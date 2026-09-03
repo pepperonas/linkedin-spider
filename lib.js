@@ -943,6 +943,160 @@
       '<footer>LinkedIn Spider · <a href="https://celox.io">celox.io</a></footer></body></html>';
   }
 
+  // --- ops sync: push sent requests into celox ops as Rainmaker leads --------
+  // ops takes the same row shape the CSV carries and answers per row. Every
+  // record is acknowledged by ops before it counts as synced; the state lives
+  // in its OWN storage key (`lcOpsState`, keyed by profile) so the service
+  // worker never rewrites `lcLog` while the content script is appending to it.
+  const OPS_DEFAULT_URL = 'https://ops.celox.io';
+  const OPS_IMPORT_PATH = '/api/rainmaker/leads/import/linkedin-spider';
+  const OPS_BATCH_SIZE = 200;   // ops caps a request at 2000 rows; keep payloads small
+  const OPS_TOKEN_RE = /^ops_[A-Za-z0-9_-]{32,}$/;
+
+  function opsRecordKey(record) {
+    const r = record || {};
+    return String(r.profileId || r.profileUrl || '');
+  }
+
+  function nullIfEmpty(value) {
+    const s = normalizeSpace(value);
+    return s ? s : null;
+  }
+
+  function opsRowFor(record) {
+    const r = record || {};
+    return {
+      profile_url: normalizeSpace(r.profileUrl),
+      name: nullIfEmpty(r.name),
+      company: nullIfEmpty(r.company),
+      headline: nullIfEmpty(r.headline),
+      location: nullIfEmpty(r.location),
+      degree: nullIfEmpty(r.degree),
+      profile_id: nullIfEmpty(r.profileId),
+      method: nullIfEmpty(r.method),
+      page_url: nullIfEmpty(r.pageUrl),
+      ts: nullIfEmpty(r.ts)
+    };
+  }
+
+  // Everything ops has not acknowledged yet. Failed sends are retried; rows
+  // ops declared invalid are not (they will never become valid).
+  function opsPending(log, state) {
+    const st = state && typeof state === 'object' ? state : {};
+    const out = [];
+    for (const r of Array.isArray(log) ? log : []) {
+      if (!r || typeof r !== 'object') continue;
+      if (!normalizeSpace(r.profileUrl)) continue;
+      const key = opsRecordKey(r);
+      const entry = st[key];
+      if (entry && (entry.status === 'ok' || entry.status === 'invalid')) continue;
+      out.push(r);
+    }
+    return out;
+  }
+
+  function opsBatches(items, size) {
+    const n = (typeof size === 'number' && size > 0) ? size : OPS_BATCH_SIZE;
+    const out = [];
+    for (let i = 0; i < (items || []).length; i += n) out.push(items.slice(i, i + n));
+    return out;
+  }
+
+  // Fold one ops response into the state. Rows are matched by the index ops
+  // echoes back — never by position in the log, which may have moved.
+  function applyOpsResult(state, sent, result, now) {
+    const next = Object.assign({}, state && typeof state === 'object' ? state : {});
+    const rows = (result && Array.isArray(result.results)) ? result.results : [];
+    for (const row of rows) {
+      const record = sent[row.index];
+      if (!record) continue;
+      const key = opsRecordKey(record);
+      if (!key) continue;
+      const decision = row.decision || 'error';
+      const acknowledged = decision === 'create' || decision === 'update' || decision === 'unchanged';
+      const entry = {
+        status: acknowledged ? 'ok' : (decision === 'invalid' ? 'invalid' : 'error'),
+        decision,
+        leadId: row.lead_id || null,
+        at: now
+      };
+      if (row.error) entry.error = row.error;
+      next[key] = entry;
+    }
+    return next;
+  }
+
+  // Trims, drops any path, insists on https except for a local dev server.
+  function opsNormalizeUrl(raw) {
+    const s = normalizeSpace(raw);
+    if (!s) return OPS_DEFAULT_URL;
+    let u;
+    try { u = new URL(s); } catch (e) { return null; }
+    const local = u.hostname === 'localhost' || u.hostname === '127.0.0.1';
+    if (u.protocol !== 'https:' && !(u.protocol === 'http:' && local)) return null;
+    return u.origin;
+  }
+
+  function opsValidToken(token) {
+    return OPS_TOKEN_RE.test(String(token || ''));
+  }
+
+  // One sync: pending → batches → POST → state. `fetchFn` is injected so the
+  // same function runs in the service worker, in tests, and in Node against a
+  // real server. Never throws: the error lands in `summary.error` and the
+  // state keeps only what ops acknowledged, so the next run retries the rest.
+  async function opsSyncRun(opts) {
+    const o = opts || {};
+    const settings = o.settings || {};
+    const now = typeof o.now === 'number' ? o.now : Date.now();
+    const base = opsNormalizeUrl(settings.baseUrl);
+    let state = Object.assign({}, o.state && typeof o.state === 'object' ? o.state : {});
+    const summary = { at: now, sent: 0, created: 0, updated: 0, unchanged: 0, invalid: 0, errors: 0, error: null };
+
+    if (!opsValidToken(settings.token)) {
+      summary.error = 'No valid ops API token configured';
+      return { state, summary, error: summary.error };
+    }
+    if (!base) {
+      summary.error = 'Invalid ops URL';
+      return { state, summary, error: summary.error };
+    }
+
+    const pending = opsPending(o.log, state);
+    const fetchFn = o.fetchFn || (typeof fetch === 'function' ? fetch : null);
+    for (const batch of opsBatches(pending, o.batchSize)) {
+      let result;
+      try {
+        const resp = await fetchFn(base + OPS_IMPORT_PATH, {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + settings.token,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ rows: batch.map(opsRowFor), commit: true })
+        });
+        if (!resp.ok) {
+          let detail = '';
+          try { const j = await resp.json(); detail = (j && (j.detail || j.message)) || ''; } catch (e) { /* no body */ }
+          summary.error = 'ops answered ' + resp.status + (detail ? ': ' + (typeof detail === 'string' ? detail : JSON.stringify(detail)) : '');
+          break;
+        }
+        result = await resp.json();
+      } catch (e) {
+        summary.error = 'ops unreachable: ' + (e && e.message ? e.message : String(e));
+        break;
+      }
+      state = applyOpsResult(state, batch, result, now);
+      summary.sent += batch.length;
+      summary.created += result.created || 0;
+      summary.updated += result.updated || 0;
+      summary.unchanged += result.unchanged || 0;
+      summary.invalid += result.invalid || 0;
+      summary.errors += result.errors || 0;
+    }
+    return { state, summary, error: summary.error };
+  }
+
   const LC = {
     getCsrfToken,
     getProfileId,
@@ -999,7 +1153,18 @@
     buildBackup,
     parseBackup,
     backupFilename,
-    jsonDataUrl
+    jsonDataUrl,
+    OPS_DEFAULT_URL,
+    OPS_IMPORT_PATH,
+    OPS_BATCH_SIZE,
+    opsRecordKey,
+    opsRowFor,
+    opsPending,
+    opsBatches,
+    applyOpsResult,
+    opsNormalizeUrl,
+    opsValidToken,
+    opsSyncRun
   };
 
   root.LC = LC;

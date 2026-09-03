@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.9.1-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.10.0-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/manifest-v3-green?style=flat-square&logo=googlechrome&logoColor=white" alt="Manifest V3">
   <img src="https://img.shields.io/badge/world-MAIN_%2B_ISOLATED-8957e5?style=flat-square" alt="MAIN + ISOLATED world">
   <img src="https://img.shields.io/badge/platform-Chrome-yellow?style=flat-square&logo=googlechrome&logoColor=white" alt="Chrome">
@@ -37,7 +37,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/tests-287_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-346_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
   <img src="https://img.shields.io/badge/tested_with-Vitest-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest">
   <img src="https://img.shields.io/badge/DOM-jsdom-15a2bb?style=flat-square" alt="jsdom">
   <img src="https://img.shields.io/badge/build-no_build_step-brightgreen?style=flat-square" alt="No Build Step">
@@ -93,6 +93,7 @@ LinkedIn ändert sein Frontend (CSS-Klassen, DOM-Struktur) und seine internen AP
 - ⬇ **CSV-Export** aus dem Popup — Excel-fertig (Semikolon + UTF-8-BOM), Dateiname mit Datumsstempel als Vorschlag
 - 📊 **HTML-Report-Export** — eigenständige Datei mit Chart, Kontingent und Kontakttabelle, ohne externe Assets
 - 🔖 **Versionsnummer + Links im Footer** des Popups (SemVer)
+- 🔗 **celox-ops-Anbindung** — gesendete Anfragen als Rainmaker-Leads (Status „angeschrieben"), per CSV-Import in ops oder als Push aus der Extension (Service-Worker, optional automatisch)
 - 🔁 **Duplikatsperre über Sessions** — wer einmal im Protokoll steht, wird nie erneut angefragt
 - Visuelles Status-Badge (unten rechts auf der Seite)
 - Erfolgreiche Vernetzungen werden mit 🍻-Emoji markiert — mit Material-3-Expressive-Physik-Animation (Fall mit Gravitation, Aufprall-Squash & abklingende Bounces) und Custom-Tooltip beim Hover
@@ -203,6 +204,34 @@ Die Karten-Felder sind Best-Effort: Ändert LinkedIn sein DOM, bleibt die betrof
 - **Sicherheit:** Session-Header (`csrf-token`, `cookie`, `authorization`) werden aus dem Recipe **entfernt**, bevor es in die Datei geht — ein Backup, das man weiterreicht, trägt kein Sitzungs-Token. Funktional geht nichts verloren: bei jedem Versand wird ohnehin ein frischer CSRF-Token eingesetzt.
 - **Ein Restore startet nie den Versand.** `Auto-Connect` steht danach immer auf AUS, egal was in der Datei stand.
 
+**Leads nach celox ops übertragen (ab 2.10.0):**
+
+Jede gesendete Kontaktanfrage kann als Lead in [celox ops](https://ops.celox.io) landen — als
+`RainmakerLead` mit Status **„angeschrieben"** und Quelle `linkedin-spider`. ops erkennt Personen,
+die schon in der Pipeline stehen, an der Profil-URL und **ergänzt nur, was fehlt** — nichts wird
+überschrieben, niemand zurückgestuft. Ein doppelter Import ist auf Datenbankseite unmöglich.
+
+Zwei Wege, dieselbe Abbildung:
+
+| Weg | Wo | Wann sinnvoll |
+|-----|-----|---------------|
+| **CSV-Import** | ops → Pipeline → **„Spider-CSV"** | Der Export von oben, mit Vorschau (neu / ergänzt / bereits vorhanden) vor der Übernahme. Kein Token nötig. |
+| **Push aus der Extension** | Popup-Zeile `ops: … pending` → **Sync**, oder automatisch nach jedem Versand | Läuft im Service-Worker, überlebt also das Schließen des Popups. |
+
+Einrichtung für den Push: in ops unter **Einstellungen → „API-Token für LinkedIn Spider"** einen
+Token erzeugen (wird genau einmal angezeigt), dann im Popup auf ⚙ → Token eintragen → **Test
+connection** → **Save**. Optional **„Sync automatically"** einschalten.
+
+- Der Token kann in ops **ausschließlich Leads importieren** — nichts lesen, nichts löschen. Er wird
+  nur im Browserprofil gespeichert und geht an keinen anderen Dienst.
+- Der Sync-Stand liegt in einem eigenen Speicherschlüssel (`lcOpsState`), getrennt vom Protokoll:
+  der Worker schreibt nie in `lcLog`, während das Content-Script dort anhängt.
+- Fehlgeschlagene Übertragungen (Netz weg, Token widerrufen) bleiben ausstehend und werden beim
+  nächsten Sync erneut versucht; die Fehlermeldung steht in der Popup-Zeile. Was ops als ungültig
+  ablehnt (keine LinkedIn-Profil-URL), wird nicht ewig wiederholt.
+- **Was die Extension nicht behaupten kann:** die Annahme einer Anfrage. Sie sieht nur den Versand;
+  `connected` setzt man in ops von Hand.
+
 **Footer im Popup:**
 
 Unten im Popup stehen die **Versionsnummer** (SemVer, direkt aus `manifest.json` gelesen — nie hart im Code) sowie Links zu [celox.io](https://celox.io), zur [Google-Maps-Bewertung](https://g.page/r/CXgdRV3QysvxEBM/review) und zur PayPal-Spende an `martin.pfeffer@celox.io`.
@@ -226,7 +255,9 @@ Zwei Content-Script-Welten plus Popup:
 | `interceptor.js` | **MAIN** (`document_start`) | Patcht `fetch`/`XMLHttpRequest`, schneidet LinkedIns Invite-Request mit, schickt das "Recipe" per `postMessage` |
 | `lib.js` | ISOLATED | Reine, testbare Kernfunktionen: Selektoren, Recipe-Bau, Invite-Erkennung, Kontingent-/Chart-Mathematik, SVG-Chart, Backup-Format |
 | `content.js` | ISOLATED | Orchestrierung: DOM-Scan, recipe-getriebene API-Calls, Click-Fallback, Recipe-Lernen, Badge, Kontingent-Historie |
-| `popup.html` / `popup.js` | — | Popup-UI: Toggle, Kontingent, Chart, Counter, API-Modus, CSV-/HTML-/Backup-Export, Restore, Footer (lädt `lib.js` mit) |
+| `popup.html` / `popup.js` | — | Popup-UI: Toggle, Kontingent, Chart, Counter, API-Modus, ops-Zeile, CSV-/HTML-/Backup-Export, Restore, Footer (lädt `lib.js` mit) |
+| `background.js` | Service-Worker | ops-Sync: reagiert auf `opsSync`/`opsTest`-Nachrichten und (bei Auto-Sync) auf neue Protokoll-Einträge; die Logik selbst ist `lib.js::opsSyncRun` mit injiziertem `fetch` |
+| `options.html` / `options.js` / `options.css` | — | Optionsseite: ops-URL, API-Token, Auto-Sync, Verbindungstest, Sync-Stand, „Forget sync state" |
 | `styles.css` | — | Popup-Styling |
 | `manifest.json` | — | Chrome Extension Manifest V3 |
 | `icon.png` | — | Extension-Icon |
@@ -238,7 +269,7 @@ npm install
 npm test
 ```
 
-**287 Unit- und Integrationstests** mit Vitest + jsdom (Zeitzone in `vitest.config.js` auf `Europe/Berlin` gepinnt — die Kontingent- und Chart-Rechnung ist kalenderlokal, und der Fehler, den naive Millisekunden-Arithmetik erzeugt, existiert nur dort, wo die Uhren wirklich springen):
+**346 Unit- und Integrationstests** mit Vitest + jsdom (Zeitzone in `vitest.config.js` auf `Europe/Berlin` gepinnt — die Kontingent- und Chart-Rechnung ist kalenderlokal, und der Fehler, den naive Millisekunden-Arithmetik erzeugt, existiert nur dort, wo die Uhren wirklich springen):
 - `test/lib.test.js` — Kernfunktionen, Self-Healing-Helfer (Recipe-Bau, Invite-Erkennung), Mehrsprachen-Erkennung
 - `test/export.test.js` — Namensschälung, Kartenextraktion, CSV-Erzeugung (Quoting, Injection-Schutz, BOM), Dateiname, Protokoll-Deckel
 - `test/content-log.test.js` — lädt `content.js` echt und fährt einen kompletten Tick: erfolgreicher Send landet mit Kartendaten im Protokoll, Duplikatsperre greift
@@ -251,6 +282,9 @@ npm test
 - `test/report.test.js` — HTML-Report: Eigenständigkeit (kein Skript, kein externer Verweis), Escaping gescrapter Namen, Kontingent-/Zeitraum-Angaben, Leerzustand
 - `test/styles.test.js` — Kontrast-Untergrenzen (4,5:1 bzw. 3:1) für Popup **und** Report-CSS, Layout-Vertrag der Knopfreihe, jede von `popup.js` gesuchte ID existiert im Markup
 - `test/resilience.test.js` — Verhalten nach einem Extension-Reload (Badge-Hinweis, Timer abgeraeumt, `getStatus` meldet es) + Laufzeit-Deckel fuer den Backfill
+- `test/ops-sync.test.js` — Sync-Kern (`opsSyncRun` mit injiziertem `fetch`): Bearer-Token, Stapel, Zuordnung per Antwort-Index, 401/Netzfehler lassen den Stand unberührt, „ungültig" wird nicht ewig wiederholt
+- `test/background.test.js` — lädt `background.js` echt: Sync auf Nachricht, Auto-Sync mit Entprellung, kein paralleler Lauf, `lcLog` wird nie angefasst
+- `test/options.test.js` — lädt `options.html` + `options.js` echt: Validierung, Host-Berechtigung, Verbindungstest, Sync-Stand, zweistufiges Vergessen
 - `test/version.test.js` — SemVer, Gleichstand `manifest.json` ↔ `package.json` ↔ README-Badge, Footer-Vertrag, **Doku-Integritaet** (kein toter Bildverweis, jedes Bild mit Alt-Text, beide READMEs listen genau die vorhandenen Test-Dateien)
 - `test/release.test.js` — prüft, dass das Release-ZIP jede vom Manifest referenzierte Datei enthält
 
@@ -266,6 +300,16 @@ npx vitest run -t "buildInviteRequest"
 - **Release** — Bei Push eines `v*`-Tags werden Tests ausgeführt und ein GitHub Release mit ZIP erstellt
 
 ## Changelog
+
+### 2.10.0 — celox-ops-Anbindung
+
+- **Leads nach ops**: jede gesendete Anfrage als `RainmakerLead` mit Status „angeschrieben" und Quelle `linkedin-spider`. ops dedupliziert über die normalisierte Profil-URL (Unique-Index je Bereich) und füllt beim Treffer nur leere Felder — nie überschreiben, nie zurückstufen
+- **Zwei Wege, eine Abbildung**: CSV-Import in ops (Pipeline → „Spider-CSV", mit Vorschau) und Push aus der Extension. Der Push läuft in einem neuen **Service-Worker** (`background.js`) — er überlebt das Schließen des Popups und kann nach jedem Versand automatisch nachliefern (entprellt, nie zwei Läufe parallel)
+- **Optionsseite** (`options.html`) für ops-URL, API-Token, Auto-Sync und Verbindungstest; das Popup zeigt nur eine Zeile (`ops: 3 pending · Sync · ⚙`) — es hatte 4 px Luft unter Chromes 600-px-Deckel
+- Der Sync-Stand liegt in `lcOpsState`, **getrennt von `lcLog`** — Worker und Content-Script schreiben nie dieselbe Liste
+- `host_permissions` für `https://ops.celox.io`; ein eigener ops-Host wird beim Speichern per `optional_host_permissions` angefragt
+- ⚠️ **Der Release-Wächter hatte einen blinden Fleck**: er kannte nur Content-Scripts und das Popup, nicht `background.service_worker`, `options_ui.page` und `importScripts()` — genau die Art Lücke, die 2.7.0–2.7.4 ohne `interceptor.js` ausliefern ließ. Jetzt prüft er jeden Manifest-Einstieg
+- Suite 287 → 346; 19 Mutationsproben, alle gefangen (eine erst nach Nachschärfen: Zuordnung per Antwort-Index vs. Position war mit geordneten Fixtures nicht unterscheidbar)
 
 ### 2.9.1 — Nach einem Update nicht mehr stumm
 

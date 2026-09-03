@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>LinkedIn Spider — ops sync</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="options.css">
+</head>
+<body class="options">
+  <div class="options-wrap">
+    <h1>LinkedIn Spider · celox ops sync</h1>
+    <p class="lead">
+      Every sent connection request can be pushed into <a href="https://ops.celox.io" target="_blank" rel="noopener noreferrer">celox ops</a>
+      as a Rainmaker lead with status <em>angeschrieben</em>. ops recognises people already in your pipeline by their
+      profile URL and only fills in what is missing — nothing is overwritten, nobody is moved backwards.
+    </p>
+
+    <section class="opt-card">
+      <h2>Connection</h2>
+      <label class="opt-field">
+        <span>ops URL</span>
+        <input type="url" id="ops-url" placeholder="https://ops.celox.io" autocomplete="off" spellcheck="false">
+      </label>
+      <label class="opt-field">
+        <span>API token</span>
+        <input type="password" id="ops-token" placeholder="ops_…" autocomplete="off" spellcheck="false">
+      </label>
+      <p class="opt-help">
+        Create the token in ops under <strong>Einstellungen → API-Token für LinkedIn Spider</strong>. It can only import
+        leads — it cannot read, change or delete anything else. It is stored in this browser profile only.
+      </p>
+      <div class="opt-actions">
+        <button id="ops-test" class="reset-btn">Test connection</button>
+        <button id="ops-save" class="primary-btn">Save</button>
+      </div>
+      <p class="hint" id="ops-hint"></p>
+    </section>
+
+    <section class="opt-card">
+      <h2>Behaviour</h2>
+      <label class="toggle-row opt-toggle">
+        <span class="label">Sync automatically after every sent request</span>
+        <span class="switch"><input type="checkbox" id="ops-auto"><span class="slider"></span></span>
+      </label>
+      <p class="opt-help">Off: nothing leaves the browser until you press <em>Sync</em> in the popup.</p>
+    </section>
+
+    <section class="opt-card">
+      <h2>Status</h2>
+      <div class="opt-stats">
+        <div><b id="st-synced">0</b><span>synced</span></div>
+        <div><b id="st-pending">0</b><span>pending</span></div>
+        <div><b id="st-invalid">0</b><span>rejected</span></div>
+      </div>
+      <p class="opt-help" id="st-last">No sync yet.</p>
+      <div class="opt-actions">
+        <button id="ops-sync-now" class="primary-btn">Sync now</button>
+        <button id="ops-forget" class="reset-btn danger">Forget sync state</button>
+      </div>
+      <p class="opt-help">
+        <em>Forget sync state</em> makes every saved contact pending again. Safe: ops deduplicates by profile URL,
+        so a second push only refreshes what is missing. Use it after switching ops accounts.
+      </p>
+    </section>
+
+    <footer class="footer">
+      <div class="footer-version" id="version"></div>
+      <div class="footer-links">
+        <a href="https://celox.io" target="_blank" rel="noopener noreferrer">celox.io</a>
+      </div>
+    </footer>
+  </div>
+  <script src="lib.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

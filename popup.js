@@ -20,6 +20,9 @@ const rangesEl = document.getElementById('ranges');
 const chartEl = document.getElementById('chart');
 const rangeTotal = document.getElementById('range-total');
 const versionEl = document.getElementById('version');
+const opsStatus = document.getElementById('ops-status');
+const opsSyncBtn = document.getElementById('ops-sync');
+const opsSettingsBtn = document.getElementById('ops-settings');
 
 let enabled = false;
 let log = [];             // stored contact log, read straight from storage
@@ -31,6 +34,10 @@ let lastChartKey = '';    // fingerprint guard — see renderStats()
 let tabReachable = true;  // is a content script answering in the active tab?
 let misses = 0;           // consecutive unanswered status polls
 let pollTimer = null;
+let ops = null;            // { baseUrl, token, auto } or null when not set up
+let opsState = {};         // per-contact acknowledgement from ops
+let opsLast = null;        // summary of the last sync run
+let opsBusy = false;
 
 const VERSION = (chrome.runtime && chrome.runtime.getManifest)
   ? (chrome.runtime.getManifest().version || '') : '';
@@ -120,7 +127,7 @@ function renderStats() {
     ':' + (events[events.length - 1] || 0);
   if (key === lastChartKey) return;
   lastChartKey = key;
-  chartEl.innerHTML = LC.chartSvg(buckets, { width: 300, height: 68 });
+  chartEl.innerHTML = LC.chartSvg(buckets, { width: 300, height: 56 });
 }
 
 // --- Stored state -----------------------------------------------------------
@@ -135,13 +142,55 @@ function renderLog() {
 }
 
 function loadState() {
-  chrome.storage.local.get(['lcLog', 'lcEvents', 'lcRange'], (result) => {
+  chrome.storage.local.get(['lcLog', 'lcEvents', 'lcRange', 'lcOps', 'lcOpsState', 'lcOpsLast'], (result) => {
     log = Array.isArray(result.lcLog) ? result.lcLog : [];
     events = LC.normalizeEvents(result.lcEvents);
     range = LC.rangeByKey(result.lcRange).key;
+    ops = (result.lcOps && result.lcOps.token) ? result.lcOps : null;
+    opsState = (result.lcOpsState && typeof result.lcOpsState === 'object') ? result.lcOpsState : {};
+    opsLast = result.lcOpsLast || null;
     syncChips();
     renderLog();
     renderStats();
+    renderOps();
+  });
+}
+
+// --- celox ops ---------------------------------------------------------------
+// The worker does the pushing; the popup only shows where things stand.
+function renderOps() {
+  if (!opsStatus) return;
+  const pending = ops ? LC.opsPending(log, opsState).length : 0;
+  let synced = 0;
+  for (const v of Object.values(opsState)) if (v && v.status === 'ok') synced++;
+  let text, cls = '';
+  if (!ops) {
+    text = 'ops: not set up';
+  } else if (opsBusy) {
+    text = 'ops: syncing…';
+  } else if (opsLast && opsLast.error) {
+    text = 'ops: ' + opsLast.error;
+    cls = 'error';
+  } else if (pending > 0) {
+    text = 'ops: ' + pending + ' pending' + (synced ? ' · ' + synced + ' synced' : '');
+    cls = 'pending';
+  } else {
+    text = 'ops: all synced' + (synced ? ' (' + synced + ')' : '');
+    cls = 'ok';
+  }
+  opsStatus.textContent = text;
+  opsStatus.className = 'ops-status' + (cls ? ' ' + cls : '');
+  opsStatus.title = ops ? ops.baseUrl + (ops.auto ? ' · auto-sync on' : ' · manual') : 'Set up in the extension options';
+  opsSyncBtn.disabled = !ops || opsBusy || pending === 0;
+}
+
+function askWorker(msg) {
+  return new Promise((resolve) => {
+    if (!chrome.runtime || !chrome.runtime.sendMessage) return resolve(null);
+    chrome.runtime.sendMessage(msg, (resp) => {
+      if (chrome.runtime.lastError) return resolve(null);
+      resolve(resp);
+    });
   });
 }
 
@@ -287,6 +336,31 @@ function applyRestore() {
 }
 
 // --- Buttons ----------------------------------------------------------------
+if (opsSyncBtn) {
+  opsSyncBtn.addEventListener('click', async () => {
+    if (!ops || opsBusy) return;
+    opsBusy = true;
+    renderOps();
+    const resp = await askWorker({ action: 'opsSync' });
+    opsBusy = false;
+    if (!resp) {
+      say('The extension worker did not answer — reload the extension.', true);
+    } else if (resp.ok && resp.summary) {
+      say('ops: ' + resp.summary.sent + ' sent · ' + resp.summary.created + ' new · ' +
+          resp.summary.updated + ' updated · ' + resp.summary.unchanged + ' already there');
+    } else {
+      say(resp.error || 'ops sync failed', true);
+    }
+    loadState();
+  });
+}
+
+if (opsSettingsBtn) {
+  opsSettingsBtn.addEventListener('click', () => {
+    if (chrome.runtime && chrome.runtime.openOptionsPage) chrome.runtime.openOptionsPage();
+  });
+}
+
 toggle.addEventListener('change', async () => {
   enabled = toggle.checked;
   const resp = await sendMessage({ action: 'toggle', enabled });

@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.9.1-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.10.0-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/manifest-v3-green?style=flat-square&logo=googlechrome&logoColor=white" alt="Manifest V3">
   <img src="https://img.shields.io/badge/world-MAIN_%2B_ISOLATED-8957e5?style=flat-square" alt="MAIN + ISOLATED world">
   <img src="https://img.shields.io/badge/platform-Chrome-yellow?style=flat-square&logo=googlechrome&logoColor=white" alt="Chrome">
@@ -37,7 +37,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/tests-287_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-346_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
   <img src="https://img.shields.io/badge/tested_with-Vitest-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest">
   <img src="https://img.shields.io/badge/DOM-jsdom-15a2bb?style=flat-square" alt="jsdom">
   <img src="https://img.shields.io/badge/build-no_build_step-brightgreen?style=flat-square" alt="No Build Step">
@@ -93,6 +93,7 @@ LinkedIn constantly changes its frontend (CSS classes, DOM structure) and its in
 - ⬇ **CSV export** from the popup — spreadsheet-ready (semicolon + UTF-8 BOM), file name with a date stamp pre-filled in the save dialog
 - 📊 **HTML report export** — a self-contained file with the chart, the quota and the contact table, no external assets
 - 🔖 **Version number + links in the popup footer** (SemVer)
+- 🔗 **celox ops integration** — sent requests as Rainmaker leads (status "contacted"), via CSV import in ops or pushed from the extension (service worker, optionally automatic)
 - 🔁 **Cross-session duplicate guard** — anyone in the log is never asked again
 - Visual status badge (bottom right on page)
 - Successful connections are marked with a 🍻 emoji — with a Material 3 Expressive physics animation (gravity drop, impact squash & decaying bounces) and a custom tooltip on hover
@@ -202,6 +203,33 @@ Card fields are best-effort: if LinkedIn changes its DOM, the affected column st
 - **Security:** session headers (`csrf-token`, `cookie`, `authorization`) are **stripped** from the recipe before it reaches the file — a backup you pass on carries no session token. Nothing is lost functionally: a fresh CSRF token is injected on every send anyway.
 - **A restore never starts sending.** `Auto-Connect` is always OFF afterwards, whatever the file said.
 
+**Pushing leads into celox ops (from 2.10.0):**
+
+Every sent connection request can land in [celox ops](https://ops.celox.io) as a lead — a
+`RainmakerLead` with status **"contacted"** and source `linkedin-spider`. ops recognises people who
+are already in your pipeline by their profile URL and **only fills in what is missing** — nothing is
+overwritten, nobody is moved backwards. A duplicate import is impossible on the database side.
+
+Two paths, one mapping:
+
+| Path | Where | When |
+|------|-------|------|
+| **CSV import** | ops → Pipeline → **"Spider-CSV"** | The export from above, with a preview (new / updated / already there) before anything is written. No token needed. |
+| **Push from the extension** | popup row `ops: … pending` → **Sync**, or automatically after every send | Runs in the service worker, so it survives the popup closing. |
+
+Setup for the push: in ops under **Einstellungen → "API-Token für LinkedIn Spider"** create a token
+(shown exactly once), then in the popup click ⚙ → paste the token → **Test connection** → **Save**.
+Optionally enable **"Sync automatically"**.
+
+- In ops the token can **only import leads** — it cannot read, change or delete anything. It is stored
+  in this browser profile only and is never sent anywhere else.
+- The sync state lives in its own storage key (`lcOpsState`), apart from the log: the worker never
+  writes `lcLog` while the content script is appending to it.
+- Failed pushes (network down, token revoked) stay pending and are retried on the next sync; the error
+  is shown in the popup row. What ops rejects as invalid (no LinkedIn profile URL) is not retried forever.
+- **What the extension cannot claim:** that a request was accepted. It only sees the send; `connected`
+  is set by hand in ops.
+
 **Popup footer:**
 
 The bottom of the popup carries the **version number** (SemVer, read straight from `manifest.json` — never hard-coded) plus links to [celox.io](https://celox.io), the [Google Maps review page](https://g.page/r/CXgdRV3QysvxEBM/review) and a PayPal donation to `martin.pfeffer@celox.io`.
@@ -225,7 +253,9 @@ Two content-script worlds plus the popup:
 | `interceptor.js` | **MAIN** (`document_start`) | Patches `fetch`/`XMLHttpRequest`, captures LinkedIn's invite request, posts the "recipe" via `postMessage` |
 | `lib.js` | ISOLATED | Pure, testable core functions: selectors, recipe building, invite detection, quota/chart maths, SVG chart, backup format |
 | `content.js` | ISOLATED | Orchestration: DOM scan, recipe-driven API calls, click fallback, recipe learning, badge, quota history |
-| `popup.html` / `popup.js` | — | Popup UI: toggle, quota, chart, counter, API mode, CSV/HTML/backup export, restore, footer (loads `lib.js` too) |
+| `popup.html` / `popup.js` | — | Popup UI: toggle, quota, chart, counter, API mode, ops row, CSV/HTML/backup export, restore, footer (loads `lib.js` too) |
+| `background.js` | service worker | ops sync: answers `opsSync`/`opsTest` messages and (with auto-sync) reacts to new log entries; the logic itself is `lib.js::opsSyncRun` with `fetch` injected |
+| `options.html` / `options.js` / `options.css` | — | Options page: ops URL, API token, auto-sync, connection test, sync state, "Forget sync state" |
 | `styles.css` | — | Popup styling |
 | `manifest.json` | — | Chrome Extension Manifest V3 |
 | `icon.png` | — | Extension icon |
@@ -237,7 +267,7 @@ npm install
 npm test
 ```
 
-**287 unit and integration tests** with Vitest + jsdom (the timezone is pinned to `Europe/Berlin` in `vitest.config.js` — the quota and chart maths are calendar-local, and the bug naive millisecond arithmetic causes only exists where clocks actually shift):
+**346 unit and integration tests** with Vitest + jsdom (the timezone is pinned to `Europe/Berlin` in `vitest.config.js` — the quota and chart maths are calendar-local, and the bug naive millisecond arithmetic causes only exists where clocks actually shift):
 - `test/lib.test.js` — core functions, self-healing helpers (recipe building, invite detection), multilingual detection
 - `test/export.test.js` — name cleaning, card scraping, CSV generation (quoting, injection guard, BOM), file name, log cap
 - `test/content-log.test.js` — loads `content.js` for real and drives a full tick: a successful send lands in the log with its card data, duplicate guard holds
@@ -250,6 +280,9 @@ npm test
 - `test/report.test.js` — HTML report: self-containment (no script, no external reference), escaping of scraped names, quota/period figures, empty state
 - `test/styles.test.js` — contrast floors (4.5:1 / 3:1) for the popup **and** the report stylesheet, button-row layout contract, every id `popup.js` reaches for exists in the markup
 - `test/resilience.test.js` — behaviour after an extension reload (badge notice, timer torn down, `getStatus` reports it) + a runtime cap on the backfill
+- `test/ops-sync.test.js` — the sync core (`opsSyncRun` with `fetch` injected): bearer token, batching, matching by response index, 401/network errors leave the state untouched, "invalid" is not retried forever
+- `test/background.test.js` — loads `background.js` for real: sync on message, debounced auto-sync, never two runs at once, `lcLog` is never touched
+- `test/options.test.js` — loads `options.html` + `options.js` for real: validation, host permission, connection test, sync state, two-step forget
 - `test/version.test.js` — SemVer, parity between `manifest.json`, `package.json` and the README badge, footer contract, **documentation integrity** (no dead image reference, every image has alt text, both READMEs list exactly the test files that exist)
 - `test/release.test.js` — checks the release ZIP contains every file the manifest references
 
@@ -265,6 +298,16 @@ npx vitest run -t "buildInviteRequest"
 - **Release** — On push of a `v*` tag, tests are run and a GitHub Release with ZIP is created
 
 ## Changelog
+
+### 2.10.0 — celox ops integration
+
+- **Leads into ops**: every sent request as a `RainmakerLead` with status "contacted" and source `linkedin-spider`. ops deduplicates on the normalised profile URL (unique index per workspace) and, on a match, fills only empty fields — never overwrites, never moves a lead backwards
+- **Two paths, one mapping**: CSV import in ops (Pipeline → "Spider-CSV", with preview) and a push from the extension. The push runs in a new **service worker** (`background.js`) — it survives the popup closing and can deliver automatically after every send (debounced, never two runs in parallel)
+- **Options page** (`options.html`) for ops URL, API token, auto-sync and a connection test; the popup shows a single row (`ops: 3 pending · Sync · ⚙`) — it had 4px to spare under Chrome's 600px cap
+- The sync state lives in `lcOpsState`, **apart from `lcLog`** — worker and content script never write the same list
+- `host_permissions` for `https://ops.celox.io`; a custom ops host is requested via `optional_host_permissions` on save
+- ⚠️ **The release guard had a blind spot**: it only knew content scripts and the popup, not `background.service_worker`, `options_ui.page` or `importScripts()` — exactly the kind of gap that shipped 2.7.0–2.7.4 without `interceptor.js`. It now checks every manifest entry point
+- Suite 287 → 346; 19 mutation probes, all caught (one only after tightening: matching by response index vs. position was indistinguishable with ordered fixtures)
 
 ### 2.9.1 — No longer silent after an update
 

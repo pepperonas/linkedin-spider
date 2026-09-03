@@ -16,7 +16,7 @@ body {
 h1 {
   font-size: 16px;
   font-weight: 600;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   color: #0a66c2;
 }
 
@@ -84,7 +84,7 @@ input:checked + .slider::before {
   border-radius: 4px;
   background: #f3f3f3;
   color: #666;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .status.active {
@@ -182,8 +182,8 @@ input:checked + .slider::before {
 .panel {
   border: 1px solid #e6e9ec;
   border-radius: 8px;
-  padding: 8px 10px;
-  margin-bottom: 10px;
+  padding: 6px 10px;
+  margin-bottom: 8px;
 }
 
 .panel-head {
@@ -298,8 +298,8 @@ input:checked + .slider::before {
 
 /* --- Footer --------------------------------------------------------------- */
 .footer {
-  margin-top: 6px;
-  padding-top: 6px;
+  margin-top: 4px;
+  padding-top: 5px;
   border-top: 1px solid #e6e9ec;
   display: flex;
   align-items: center;
@@ -333,7 +333,7 @@ input:checked + .slider::before {
 .stats {
   display: flex;
   gap: 6px;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .stat {
@@ -343,7 +343,7 @@ input:checked + .slider::before {
   flex-direction: column;
   align-items: center;
   gap: 1px;
-  padding: 5px 2px;
+  padding: 4px 2px;
   border: 1px solid #e6e9ec;
   border-radius: 8px;
 }
@@ -367,3 +367,43 @@ input:checked + .slider::before {
   text-align: center;
   color: #6a7078;
 }
+
+/* --- celox ops sync row ---------------------------------------------------- */
+.ops-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  padding: 3px 8px;
+  border: 1px solid #e6e9ec;
+  border-radius: 8px;
+  font-size: 11.5px;
+}
+
+.ops-status {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #444;
+}
+
+.ops-status.pending { color: #8a4b00; }
+.ops-status.error { color: #c62828; }
+.ops-status.ok { color: #2e7d32; }
+
+.chip-btn {
+  flex: 0 0 auto;
+  padding: 3px 9px;
+  border: 1px solid #d0d5da;
+  border-radius: 12px;
+  background: #fff;
+  color: #0a66c2;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chip-btn:hover:not(:disabled) { background: #eef4fb; }
+.chip-btn:disabled { opacity: 0.45; cursor: not-allowed; }

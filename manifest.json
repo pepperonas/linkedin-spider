@@ -1,19 +1,47 @@
 {
   "manifest_version": 3,
   "name": "LinkedIn Spider",
-  "version": "2.9.1",
+  "version": "2.10.0",
   "description": "Automatically send connection requests on LinkedIn search results",
-  "permissions": ["activeTab", "storage", "downloads"],
+  "permissions": [
+    "activeTab",
+    "storage",
+    "downloads"
+  ],
+  "host_permissions": [
+    "https://ops.celox.io/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
   "content_scripts": [
     {
-      "matches": ["*://*.linkedin.com/*"],
-      "js": ["interceptor.js"],
+      "matches": [
+        "*://*.linkedin.com/*"
+      ],
+      "js": [
+        "interceptor.js"
+      ],
       "run_at": "document_start",
       "world": "MAIN"
     },
     {
-      "matches": ["*://*.linkedin.com/*"],
-      "js": ["lib.js", "content.js"],
+      "matches": [
+        "*://*.linkedin.com/*"
+      ],
+      "js": [
+        "lib.js",
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ],
