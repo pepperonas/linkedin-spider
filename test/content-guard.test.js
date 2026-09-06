@@ -179,13 +179,21 @@ describe('badge visibility', () => {
   beforeEach(() => { vi.useFakeTimers(); document.body.innerHTML = ''; setupChrome(); globalThis.fetch = vi.fn(); });
   afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
-  it('is hidden on a non-search page while paused', async () => {
-    setPath('/feed/');
+  // On a profile, in messaging, it stays out of the way.
+  it('is hidden away from the launch pages while paused', async () => {
+    setPath('/in/max-mustermann/');
     await load();
     expect(document.getElementById('lc-badge').style.display).toBe('none');
   });
   it('shows on search result pages', async () => {
     setPath('/search/results/people/?keywords=x');
+    await load();
+    expect(document.getElementById('lc-badge').style.display).not.toBe('none');
+  });
+  // Since 2.14 the badge is also the way into the search picker, and a cold
+  // start happens on the feed — no badge there would mean no way in.
+  it('shows on the feed, where a run is started from', async () => {
+    setPath('/feed/');
     await load();
     expect(document.getElementById('lc-badge').style.display).not.toBe('none');
   });
@@ -196,7 +204,7 @@ describe('badge visibility', () => {
     expect(document.getElementById('lc-badge').style.display).not.toBe('none');
   });
   it('follows in-app navigation on the next tick', async () => {
-    setPath('/feed/');
+    setPath('/in/max-mustermann/');
     await load();
     expect(document.getElementById('lc-badge').style.display).toBe('none');
     setPath('/search/results/people/');

@@ -24,3 +24,23 @@ body.options { width: auto; min-height: 100vh; background: #f3f6f8; }
 .opt-stats b { display: block; font-size: 18px; color: #0a66c2; }
 .opt-stats span { font-size: 10px; color: #6a7078; }
 .options .footer { margin-top: 20px; }
+
+/* --- Searches: catalogue editing + the per-combination tally -------------- */
+/* Same skin as the text inputs above — a textarea that looks like a stranger
+   reads as a different kind of field. */
+.opt-field textarea { width: 100%; padding: 8px 10px; border: 1px solid #d0d5da; border-radius: 6px;
+  font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; line-height: 1.5;
+  resize: vertical; box-sizing: border-box; }
+.opt-field textarea:focus { outline: 2px solid #0a66c2; outline-offset: 1px; border-color: #0a66c2; }
+.opt-filter { width: 100%; padding: 7px 10px; margin: 8px 0; border: 1px solid #d0d5da; border-radius: 6px;
+  font-size: 13px; box-sizing: border-box; }
+.opt-filter:focus { outline: 2px solid #0a66c2; outline-offset: 1px; border-color: #0a66c2; }
+/* Capped and scrollable: 350 planned combinations must not push the buttons
+   below the fold. */
+.opt-tally { max-height: 300px; overflow: auto; border: 1px solid #e3e7eb; border-radius: 6px; }
+.opt-tally table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.opt-tally th { position: sticky; top: 0; background: #f6f8fa; text-align: left; font-weight: 600;
+  color: #444; padding: 6px 10px; border-bottom: 1px solid #e3e7eb; }
+.opt-tally td { padding: 5px 10px; border-bottom: 1px solid #f0f2f4; color: #444; }
+.opt-tally td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.opt-tally .empty { padding: 12px 10px; color: #5a6068; }

@@ -201,6 +201,20 @@ The READMEs are structured (TOC · At a glance · How it works · Features · In
 - **`searchQueryOf(record)` = stored value, else derived from `pageUrl`.** Every record ever written carries the search URL, so the whole existing log answers retroactively — no migration. To enrich leads already in ops, reset the sync state (options page); ops is idempotent and only fills empty fields.
 - **A LinkedIn location FILTER is not in the term** (`geoUrn=[…]` is an opaque id). Documented as a limitation rather than guessed at from the filter pill's DOM.
 
+## Search picker + tally per "term + city" (v2.14.0)
+
+The badge is no longer only a status pill: clicking it opens `#lc-picker`, a panel with the city chips, a filter and the catalogue (`TERM_GROUPS` × `DEFAULT_TERMS`, 69 terms in three groups). A click opens `searchUrlFor(term, city)` — the city rides in the keywords, exactly as it was typed by hand before.
+
+- **Entries are `<a href>`, not click handlers.** jsdom refuses to let a test spy on `location.assign` (`Cannot redefine property`), and a navigation seam only for tests is a seam in the product. As links the browser navigates, the test asserts the `href`, and middle-click/keyboard come for free.
+- **The tally lives in `lcStats`, not in `lcLog`.** The log is FIFO-capped at 5000 and wiped by *Clear Log*; a count derived from it would silently shrink. Same reasoning as `lcEvents` for the quota. `recordSuccess` re-reads `lcStats` before writing (a second tab may have counted).
+- **`splitQuery(query, cities)` groups a send.** It matches only against the USER'S OWN city list, on whole words, and reports the city in the LIST's spelling — `statsKey` is case-insensitive, but a table that shows "berlin" or "Berlin" depending on who wrote last reads like two places. No city is a normal answer, never a guess.
+- ⚠️ **The cap must take the fresh key out of the candidates BEFORE slicing.** Skipping it inside the eviction loop deletes one too few and the cap creeps up. A test caught exactly that (fresh entry with the oldest timestamp).
+- **Seeding is keyed on `undefined`, never on "empty".** An empty tally is the user's *Reset tally*; re-seeding would undo it. `catClear` therefore writes `{}`, not `undefined` — both pinned.
+- ⚠️ **The badge now shows on the feed too** (`isLaunchPage`), because it is the way into the picker and a cold start begins there. The old comment said the feed was deliberately excluded; that trade changed when the badge gained a function. Profiles and messaging stay excluded.
+- **A content script cannot open the options page** — `chrome.runtime.openOptionsPage` is not available there. The picker sends `{action:'openOptions'}` to the worker.
+- Measured in a browser against the shipped CSS (a harness that cuts `PICKER_CSS` out of `content.js`): panel 320 px, fits at 1024×600, no horizontal overflow, worst contrast 5.83:1. The first cut had a three-line footer — the promise now sits under the head as `.lc-p-note`, the footer holds only the state (ellipsis) and the button (`nowrap`).
+- ⚠️ **A mutation probe that only checks "the file changed" is not proof it took effect.** The feed-visibility probe reported BLIND at first; the nested shell quoting had mangled the replacement into something harmless. Repeated cleanly it fires. Verify the intended LINE changed, not just the file.
+
 ## Releasing
 
 `git tag vX.Y.Z && git push --tags` triggers `.github/workflows/release.yml`: tests → ZIP → GitHub Release.
@@ -209,7 +223,7 @@ The READMEs are structured (TOC · At a glance · How it works · Features · In
 
 ## Versioning
 
-SemVer. The user-facing version lives in `manifest.json` (currently **2.13.0**) and is shown in the popup footer, read via `chrome.runtime.getManifest().version` — never hard-coded. `package.json` used to lag independently (it sat at 2.4.0 through five releases); since 2.9.0 the two must match and `test/version.test.js` pins that, along with the version badge in both READMEs and the presence of a `### <version>` changelog heading. Bump `manifest.json` + `package.json` + both README badges + both changelogs together.
+SemVer. The user-facing version lives in `manifest.json` (currently **2.14.0**) and is shown in the popup footer, read via `chrome.runtime.getManifest().version` — never hard-coded. `package.json` used to lag independently (it sat at 2.4.0 through five releases); since 2.9.0 the two must match and `test/version.test.js` pins that, along with the version badge in both READMEs and the presence of a `### <version>` changelog heading. Bump `manifest.json` + `package.json` + both README badges + both changelogs together.
 
 ## Testing conventions
 

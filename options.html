@@ -106,6 +106,48 @@
     </section>
 
     <section class="opt-card">
+      <h2>Searches</h2>
+      <p class="opt-help">
+        What the picker offers in the page (click the 🕸️ badge on LinkedIn). Each line is one search term; the
+        chosen city is appended to it, exactly as you would type it into LinkedIn's search box.
+      </p>
+      <label class="opt-field">
+        <span>Cities</span>
+        <textarea id="cat-cities" rows="4" spellcheck="false"></textarea>
+      </label>
+      <label class="opt-field">
+        <span>Direkte Kunden</span>
+        <textarea id="cat-direkt" rows="7" spellcheck="false"></textarea>
+      </label>
+      <label class="opt-field">
+        <span>Branchen / Unternehmen</span>
+        <textarea id="cat-branchen" rows="7" spellcheck="false"></textarea>
+      </label>
+      <label class="opt-field">
+        <span>Multiplikatoren</span>
+        <textarea id="cat-multi" rows="7" spellcheck="false"></textarea>
+      </label>
+      <div class="opt-actions">
+        <button id="cat-save" class="primary-btn">Save lists</button>
+        <button id="cat-reset" class="reset-btn">Restore defaults</button>
+      </div>
+      <p class="hint" id="cat-hint"></p>
+
+      <h3>Sent per combination</h3>
+      <p class="opt-help">
+        Counted per <em>term + city</em> as requests go out — this is the tally, not a view of the contact log, so
+        <em>Clear Log</em> in the popup leaves it alone. A search typed by hand counts too, as long as its city is
+        one of yours.
+      </p>
+      <input id="cat-filter" class="opt-filter" type="text" placeholder="Filter…" aria-label="Filter the tally">
+      <div id="cat-tally" class="opt-tally"></div>
+      <div class="opt-actions">
+        <button id="cat-clear" class="reset-btn danger">Reset tally</button>
+      </div>
+      <p class="hint" id="tally-hint"></p>
+    </section>
+
+    <section class="opt-card">
       <h2>Updates</h2>
       <p class="opt-help">
         Sideloaded extensions do not update themselves. This asks GitHub for the latest release — <strong>only when

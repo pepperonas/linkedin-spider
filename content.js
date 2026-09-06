@@ -6,7 +6,9 @@
     extractCardInfo, buildRecord, appendRecord, profileIdsFromLog, LOG_CAP,
     appendEvent, backfillEvents, weekQuota,
     addSeen, seenIds, isPendingText, isSearchPage, MAX_CONSECUTIVE_FAILS,
-    normalizePace, nextTickDelay, paceBlocked, blockSet, isBlockedUrl
+    normalizePace, nextTickDelay, paceBlocked, blockSet, isBlockedUrl,
+    TERM_GROUPS, normalizeTerms, normalizeCities, normalizeStats, bumpStat,
+    backfillStats, statCountFor, searchQueryOf, splitQuery, searchUrlFor
   } = window.LC;
   let active = false;
   let tickTimer = null;     // the next scheduled tick (setTimeout, re-armed after each run)
@@ -18,6 +20,13 @@
   let contextGone = false;  // the extension was reloaded out from under this page
   let consecutiveFails = 0; // cards that failed API AND click, in a row
   let halted = null;        // reason string once the circuit breaker tripped
+  let terms = normalizeTerms(null);   // the search catalogue (options page)
+  let cities = normalizeCities(null); // the cities worked (options page)
+  let stats = {};           // sent requests per "term + city"
+  let pickCity = '';        // the city the picker currently offers
+  let pickerEl = null;      // the picker panel, built on first open
+  let pickerOpen = false;
+  let pickerFilter = '';
   let pace = normalizePace(null); // jitter + caps from the options page (lcPace)
   let events = [];          // send timestamps — the caps count against these
   let paused = null;        // { reason, resumeAt } while a pace cap holds the run
@@ -46,7 +55,7 @@
   // Visual debug badge
   const badge = document.createElement('div');
   badge.id = 'lc-badge';
-  badge.style.cssText = 'position:fixed;bottom:10px;right:10px;z-index:99999;background:#333;color:#fff;padding:6px 12px;border-radius:8px;font:12px sans-serif;opacity:0.9;pointer-events:none;transition:background 0.3s';
+  badge.style.cssText = 'position:fixed;bottom:10px;right:10px;z-index:99999;background:#333;color:#fff;padding:6px 12px;border-radius:8px;font:12px sans-serif;opacity:0.9;transition:background 0.3s';
   badge.textContent = '🕸️ ready';
   document.body.appendChild(badge);
 
@@ -57,10 +66,16 @@
   let badgeColor = '#333';
   let quotaSuffix = '';
 
-  // The badge belongs on search result pages and wherever a run is active.
-  // On the feed, on profiles, in messaging it stays out of the way.
+  // The badge belongs where a run is (or is about to be) happening — search
+  // results, and the feed you land on, because since 2.14 the badge is also the
+  // way into the search picker and a cold start begins on the feed. On
+  // profiles, in messaging, it still stays out of the way.
+  function isLaunchPage(pathname) {
+    return isSearchPage(pathname) || /^\/feed\/?$/.test(String(pathname || ''));
+  }
+
   function badgeWanted() {
-    return active || contextGone || !!halted || isSearchPage(location.pathname);
+    return active || contextGone || !!halted || pickerOpen || isLaunchPage(location.pathname);
   }
 
   function renderBadge() {
@@ -68,6 +83,182 @@
     badge.style.background = badgeColor;
     badge.style.display = badgeWanted() ? '' : 'none';
   }
+
+  // --- search picker: pick "term + city", jump into that LinkedIn search ----
+  // Entries are real links. The browser navigates, so there is no navigation
+  // call to stub in a test, middle-click opens a new tab, and the keyboard
+  // reaches them for free.
+
+  const PICKER_CSS = `
+#lc-picker{position:fixed;right:10px;bottom:46px;z-index:99999;width:320px;max-height:62vh;
+  display:none;flex-direction:column;background:#23262b;color:#e9eaec;border-radius:10px;
+  box-shadow:0 8px 28px rgba(0,0,0,.45);font:13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+#lc-picker.lc-open{display:flex}
+#lc-picker .lc-p-head{display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:10px 12px;border-bottom:1px solid #34383f;font-weight:600}
+#lc-picker .lc-p-x{background:none;border:0;color:#9aa1ab;font-size:16px;line-height:1;cursor:pointer;padding:2px 4px}
+#lc-picker .lc-p-x:hover{color:#e9eaec}
+#lc-picker .lc-p-note{padding:8px 12px 0;color:#9aa1ab;font-size:11px}
+#lc-picker .lc-p-cities{display:flex;flex-wrap:wrap;gap:6px;padding:8px 12px 6px}
+#lc-picker .lc-p-city{background:none;border:1px solid #4a505a;color:#c9cdd3;border-radius:999px;
+  padding:3px 10px;font:12px inherit;cursor:pointer}
+#lc-picker .lc-p-city:hover{border-color:#7db3ff}
+#lc-picker .lc-p-city.lc-on{background:#7db3ff;border-color:#7db3ff;color:#0d1117;font-weight:600}
+#lc-picker .lc-p-filter{margin:4px 12px 8px;padding:6px 8px;background:#1b1e22;color:#e9eaec;
+  border:1px solid #4a505a;border-radius:6px;font:13px inherit;width:calc(100% - 24px);box-sizing:border-box}
+#lc-picker .lc-p-filter::placeholder{color:#9aa1ab}
+#lc-picker .lc-p-list{overflow:auto;padding:0 6px 6px;flex:1}
+#lc-picker .lc-p-group{padding:8px 6px 4px;color:#9aa1ab;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+#lc-picker .lc-p-item{display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:6px 8px;border-radius:6px;color:#e9eaec;text-decoration:none;cursor:pointer}
+#lc-picker .lc-p-item:hover,#lc-picker .lc-p-item:focus-visible{background:#2e333a;outline:none}
+#lc-picker .lc-p-n{color:#7db3ff;font-variant-numeric:tabular-nums;font-size:12px}
+#lc-picker .lc-p-empty{padding:10px 8px;color:#9aa1ab}
+/* Both halves stay on ONE line: the state is the part that may be clipped,
+   the button never — a wrapped "Edit lists" reads as two broken words. */
+#lc-picker .lc-p-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:8px 12px;border-top:1px solid #34383f;color:#9aa1ab;font-size:12px}
+#lc-picker .lc-p-state{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+#lc-picker .lc-p-opts{background:none;border:0;color:#7db3ff;cursor:pointer;font:12px inherit;padding:0;
+  white-space:nowrap;flex:0 0 auto}
+#lc-badge{cursor:pointer}
+`;
+
+  function injectPickerStyles() {
+    if (document.getElementById('lc-picker-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'lc-picker-styles';
+    style.textContent = PICKER_CSS;
+    document.head.appendChild(style);
+  }
+
+  function buildPicker() {
+    injectPickerStyles();
+    const el = document.createElement('div');
+    el.id = 'lc-picker';
+    el.innerHTML =
+      '<div class="lc-p-head"><span>Pick a search</span>' +
+      '<button class="lc-p-x" type="button" aria-label="Close">✕</button></div>' +
+      '<div class="lc-p-note">Opens the search — it never starts sending.</div>' +
+      '<div class="lc-p-cities"></div>' +
+      '<input class="lc-p-filter" type="text" placeholder="Filter…" aria-label="Filter terms">' +
+      '<div class="lc-p-list"></div>' +
+      '<div class="lc-p-foot"><span class="lc-p-state"></span>' +
+      '<button class="lc-p-opts" type="button">Edit lists</button></div>';
+
+    el.querySelector('.lc-p-x').addEventListener('click', () => togglePicker(false));
+    el.querySelector('.lc-p-opts').addEventListener('click', () => {
+      // A content script cannot open the options page itself — the worker can.
+      try { chrome.runtime.sendMessage({ action: 'openOptions' }); } catch (e) { /* context gone */ }
+    });
+    const filter = el.querySelector('.lc-p-filter');
+    filter.addEventListener('input', () => { pickerFilter = filter.value; renderPickerList(); });
+    filter.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { togglePicker(false); return; }
+      if (e.key !== 'Enter') return;
+      const first = el.querySelector('.lc-p-item');
+      if (first) first.click();
+    });
+    el.addEventListener('keydown', (e) => { if (e.key === 'Escape') togglePicker(false); });
+    document.body.appendChild(el);
+    return el;
+  }
+
+  function renderPickerCities() {
+    const box = pickerEl.querySelector('.lc-p-cities');
+    box.textContent = '';
+    // "—" is the honest option: some searches are nationwide, and forcing a
+    // city on them would file them under a place they never targeted.
+    const options = [{ value: '', label: '—', title: 'No city' }]
+      .concat(cities.map((c) => ({ value: c, label: c, title: c })));
+    for (const opt of options) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'lc-p-city' + (opt.value === pickCity ? ' lc-on' : '');
+      b.textContent = opt.label;
+      b.title = opt.title;
+      b.setAttribute('aria-pressed', String(opt.value === pickCity));
+      b.addEventListener('click', () => {
+        pickCity = opt.value;
+        storageSet({ lcCity: pickCity });
+        renderPickerCities();
+        renderPickerList();
+      });
+      box.appendChild(b);
+    }
+  }
+
+  function renderPickerList() {
+    const list = pickerEl.querySelector('.lc-p-list');
+    list.textContent = '';
+    const needle = pickerFilter.trim().toLowerCase();
+    let shown = 0;
+    for (const group of TERM_GROUPS) {
+      const hits = (terms[group.key] || []).filter((t) => !needle || t.toLowerCase().includes(needle));
+      if (!hits.length) continue;
+      const head = document.createElement('div');
+      head.className = 'lc-p-group';
+      head.textContent = group.label;
+      list.appendChild(head);
+      for (const term of hits) {
+        const a = document.createElement('a');
+        a.className = 'lc-p-item';
+        a.href = searchUrlFor(term, pickCity);
+        const name = document.createElement('span');
+        name.className = 'lc-p-term';
+        name.textContent = term;          // catalogue entries are user text
+        a.appendChild(name);
+        const n = statCountFor(stats, term, pickCity);
+        if (n) {
+          const badgeN = document.createElement('span');
+          badgeN.className = 'lc-p-n';
+          badgeN.textContent = String(n);
+          badgeN.title = n + ' requests sent for this combination';
+          a.appendChild(badgeN);
+        }
+        list.appendChild(a);
+        shown++;
+      }
+    }
+    if (!shown) {
+      const empty = document.createElement('div');
+      empty.className = 'lc-p-empty';
+      empty.textContent = needle ? 'Nothing matches “' + needle + '”.' : 'No terms — add some under Edit lists.';
+      list.appendChild(empty);
+    }
+    // The picker never arms sending — the note under the head says so; here
+    // only the state, so the row stays on one line.
+    pickerEl.querySelector('.lc-p-state').textContent = active ? 'Run is on' : 'Run is off';
+  }
+
+  function renderPicker() {
+    if (!pickerEl || !pickerOpen) return;
+    renderPickerCities();
+    renderPickerList();
+  }
+
+  function togglePicker(on) {
+    if (contextGone) return;
+    const next = (on === undefined) ? !pickerOpen : !!on;
+    if (next && !pickerEl) pickerEl = buildPicker();
+    pickerOpen = next;
+    if (pickerEl) pickerEl.classList.toggle('lc-open', pickerOpen);
+    if (pickerOpen) {
+      renderPicker();
+      const f = pickerEl.querySelector('.lc-p-filter');
+      if (f) f.focus();
+    }
+    renderBadge();
+  }
+
+  badge.addEventListener('click', () => togglePicker());
+  badge.title = 'Pick a search';
+  document.addEventListener('click', (e) => {
+    if (!pickerOpen) return;
+    if (badge.contains(e.target)) return;
+    if (pickerEl && pickerEl.contains(e.target)) return;
+    togglePicker(false);
+  }, true);
 
   function updateBadge(text, color) {
     // Once we have given up, the reload notice is the only thing worth showing:
@@ -152,6 +343,14 @@
         blocked = blockSet(changes.lcBlock.newValue);
         console.log(LOG, 'ops blocklist updated:', blocked.size, 'profiles');
       }
+      // The catalogue, the cities and the tally are all edited elsewhere (the
+      // options page, another tab, this page's own sends) — keep the open
+      // picker honest instead of showing a stale count.
+      if (changes.lcTerms) terms = normalizeTerms(changes.lcTerms.newValue);
+      if (changes.lcCities) cities = normalizeCities(changes.lcCities.newValue);
+      if (changes.lcStats) stats = normalizeStats(changes.lcStats.newValue);
+      if (changes.lcCity) pickCity = String(changes.lcCity.newValue || '');
+      if (changes.lcTerms || changes.lcCities || changes.lcStats || changes.lcCity) renderPicker();
     });
   }
 
@@ -511,11 +710,20 @@
       pageUrl: location.href
     });
     const when = Date.parse(record.ts);
-    storageGet(['lcLog', 'lcEvents', 'lcSeen'], (res) => {
+    // Which "term + city" this went on. Derived from the search term the
+    // record already carries, so a hand-typed search counts exactly like one
+    // the picker built.
+    const where = splitQuery(record.searchQuery, cities);
+    storageGet(['lcLog', 'lcEvents', 'lcSeen', 'lcStats'], (res) => {
       const nextEvents = appendEvent(res.lcEvents, when);
+      // Re-read before writing, like the log: a second LinkedIn tab may have
+      // counted in the meantime.
+      const nextStats = bumpStat(res.lcStats, where.term, where.city, when);
+      stats = nextStats;
       storageSet({
         lcLog: appendRecord(res.lcLog, record, LOG_CAP),
         lcEvents: nextEvents,
+        lcStats: nextStats,
         // The durable guard: survives the log's FIFO cap.
         lcSeen: profileId ? addSeen(res.lcSeen, profileId) : (res.lcSeen || [])
       });
@@ -714,7 +922,8 @@
     } else if (msg.action === 'reloadState') {
       // A restore rewrote storage under us — pull the new state into memory so
       // this tab doesn't keep running on the pre-restore counters.
-      storageGet(['lcCount', 'lcRecipe', 'lcLog', 'lcEvents', 'lcSeen', 'lcPace', 'lcBlock'], applyStoredState);
+      storageGet(['lcCount', 'lcRecipe', 'lcLog', 'lcEvents', 'lcSeen', 'lcPace', 'lcBlock',
+      'lcTerms', 'lcCities', 'lcStats', 'lcCity'], applyStoredState);
       sendResponse({ ok: true });
     } else if (msg.action === 'clearLog') {
       // Also drop the in-memory guard, otherwise the popup would clear the log
@@ -751,6 +960,20 @@
     // First run after the upgrade: seed the quota history from the timestamps
     // already in the contact log. Keyed on "undefined", not on "empty" — an
     // empty series is a real state (log cleared) and must not be re-seeded.
+    terms = normalizeTerms(result.lcTerms);
+    cities = normalizeCities(result.lcCities);
+    pickCity = String(result.lcCity || '');
+    // Same rule as the quota history: seeded once, keyed on "undefined". An
+    // empty tally is a real state (the user reset it) and stays empty.
+    let tally = result.lcStats;
+    if (tally === undefined) {
+      tally = backfillStats(result.lcLog, cities);
+      storageSet({ lcStats: tally });
+      const n = Object.keys(tally).length;
+      if (n) console.log(LOG, 'Seeded the search tally with', n, 'combinations from the log');
+    }
+    stats = normalizeStats(tally);
+
     let history = result.lcEvents;
     if (history === undefined) {
       history = backfillEvents(result.lcLog);
@@ -760,5 +983,6 @@
     setQuotaFromEvents(history);
   }
 
-  storageGet(['lcCount', 'lcRecipe', 'lcLog', 'lcEvents', 'lcSeen', 'lcPace', 'lcBlock'], applyStoredState);
+  storageGet(['lcCount', 'lcRecipe', 'lcLog', 'lcEvents', 'lcSeen', 'lcPace', 'lcBlock',
+      'lcTerms', 'lcCities', 'lcStats', 'lcCity'], applyStoredState);
 })();

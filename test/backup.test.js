@@ -167,3 +167,36 @@ describe('backup file naming', () => {
     expect(JSON.parse(decodeURIComponent(url.split(',').slice(1).join(',')))).toEqual({ a: 'ä' });
   });
 });
+
+describe('the search catalogue in a backup', () => {
+  const { buildBackup, parseBackup, DEFAULT_CITIES, statCountFor } = globalThis.LC;
+
+  it('carries lists, cities and the tally through a round trip', () => {
+    const state = {
+      lcTerms: { direkt: ['CTO'], branchen: ['Hausverwaltung'], multi: ['MSP'] },
+      lcCities: ['Berlin', 'Köln'],
+      lcStats: { 'cto|berlin': { term: 'CTO', city: 'Berlin', n: 42, first: 1, last: 2 } },
+      lcCity: 'Berlin'
+    };
+    const out = parseBackup(JSON.stringify(buildBackup(state, { version: '2.14.0' })));
+    expect(out.ok).toBe(true);
+    expect(out.data.lcTerms.direkt).toEqual(['CTO']);
+    expect(out.data.lcCities).toEqual(['Berlin', 'Köln']);
+    expect(statCountFor(out.data.lcStats, 'CTO', 'Berlin')).toBe(42);
+    expect(out.data.lcCity).toBe('Berlin');
+  });
+
+  // A file written before 2.14 has none of this. It must restore the delivered
+  // lists and an EMPTY tally — "undefined" would let the content script seed
+  // the tally from the log and resurrect counts the file never carried.
+  it('restores an older backup without inventing a tally', () => {
+    const old = buildBackup({ lcCount: 5 }, { version: '2.12.0' });
+    delete old.data.lcTerms; delete old.data.lcCities; delete old.data.lcStats; delete old.data.lcCity;
+    const out = parseBackup(JSON.stringify(old));
+    expect(out.ok).toBe(true);
+    expect(out.data.lcCities).toEqual(DEFAULT_CITIES);
+    expect(out.data.lcStats).toEqual({});
+    expect(out.data.lcCity).toBe('');
+  });
+});
+

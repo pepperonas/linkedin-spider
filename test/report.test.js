@@ -99,3 +99,40 @@ describe('report file naming', () => {
     expect(decodeURIComponent(url.split(',').slice(1).join(','))).toBe('<p>ä &amp; ö</p>');
   });
 });
+
+describe('the tally in the report', () => {
+  const { reportHtml, statsSection } = globalThis.LC;
+  const stats = {
+    'kaufmännischer leiter|berlin': { term: 'Kaufmännischer Leiter', city: 'Berlin', n: 100, first: 1, last: 1757000000000 },
+    'leiter digitalisierung|': { term: 'Leiter Digitalisierung', city: '', n: 64, first: 1, last: 1757000000000 }
+  };
+
+  it('lists every combination with its count', () => {
+    const html = statsSection(stats);
+    expect(html).toContain('Kaufmännischer Leiter');
+    expect(html).toContain('<td>100</td>');
+    expect(html).toContain('164 requests across 2 combinations');
+  });
+
+  it('shows a combination without a city as such, not as blank', () => {
+    expect(statsSection(stats)).toContain('<td>—</td>');
+  });
+
+  // An empty table in a report is noise — the section stays away entirely.
+  it('is left out when nothing has been counted', () => {
+    expect(statsSection({})).toBe('');
+    expect(statsSection(undefined)).toBe('');
+  });
+
+  it('rides along in the full report', () => {
+    const html = reportHtml({ records: [], stats, version: '2.14.0' });
+    expect(html).toContain('Sent per search (2)');
+  });
+
+  it('escapes what it prints', () => {
+    const html = statsSection({ 'x|y': { term: '<img src=x>', city: 'Berlin', n: 1, first: 1, last: 1 } });
+    expect(html).not.toContain('<img');
+    expect(html).toContain('&lt;img');
+  });
+});
+

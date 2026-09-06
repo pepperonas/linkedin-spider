@@ -825,7 +825,8 @@
   // --- Backup / restore -----------------------------------------------------
   const BACKUP_APP = 'linkedin-spider';
   const BACKUP_SCHEMA = 1;
-  const BACKUP_KEYS = ['lcEnabled', 'lcCount', 'lcLog', 'lcEvents', 'lcRecipe', 'lcRange', 'lcSeen', 'lcPace'];
+  const BACKUP_KEYS = ['lcEnabled', 'lcCount', 'lcLog', 'lcEvents', 'lcRecipe', 'lcRange', 'lcSeen', 'lcPace',
+    'lcTerms', 'lcCities', 'lcStats', 'lcCity'];
   const RECORD_FIELDS = ['ts', 'name', 'profileUrl', 'headline', 'company', 'location',
     'degree', 'profileId', 'method', 'pageUrl', 'searchQuery'];
   // Headers that carry a live session. The recipe works without them (a fresh
@@ -863,7 +864,11 @@
         lcRecipe: sanitizeRecipeForBackup(s.lcRecipe),
         lcRange: rangeByKey(s.lcRange).key,
         lcSeen: addSeen([], Array.isArray(s.lcSeen) ? s.lcSeen : []),
-        lcPace: normalizePace(s.lcPace)
+        lcPace: normalizePace(s.lcPace),
+        lcTerms: normalizeTerms(s.lcTerms),
+        lcCities: normalizeCities(s.lcCities),
+        lcStats: normalizeStats(s.lcStats),
+        lcCity: normalizeSpace(s.lcCity)
       }
     };
   }
@@ -910,7 +915,14 @@
       lcRecipe: isUsableRecipe(d.lcRecipe) ? d.lcRecipe : null,
       lcRange: rangeByKey(d.lcRange).key,
       lcSeen: addSeen([], Array.isArray(d.lcSeen) ? d.lcSeen : []),
-      lcPace: normalizePace(d.lcPace)
+      lcPace: normalizePace(d.lcPace),
+      // An older backup has no catalogue — it restores the delivered lists and
+      // an empty tally, never "undefined" (which the content script would then
+      // re-seed from the log, quietly resurrecting counts the file did not have).
+      lcTerms: normalizeTerms(d.lcTerms),
+      lcCities: normalizeCities(d.lcCities),
+      lcStats: normalizeStats(d.lcStats),
+      lcCity: normalizeSpace(d.lcCity)
     };
     return {
       ok: true,
@@ -940,6 +952,23 @@
 
   // Self-contained HTML report: the same chart the popup draws, plus the quota
   // and the contact table. No external assets — it has to open from disk.
+  // The tally that replaces a hand-kept "(100x)" note. Left out entirely when
+  // nothing has been counted yet — an empty table in a report is noise.
+  function statsSection(stats) {
+    const rows = statsRows(stats);
+    if (!rows.length) return '';
+    const total = rows.reduce((n, r) => n + r.n, 0);
+    const body = rows.map((r) => '<tr><td>' + escapeHtml(r.term) + '</td><td>' +
+      escapeHtml(r.city || '—') + '</td><td>' + r.n + '</td><td>' +
+      escapeHtml(r.last ? formatTimestamp(new Date(r.last).toISOString()) : '') +
+      '</td></tr>').join('\n');
+    return '<section><h2>Sent per search (' + rows.length + ')</h2>' +
+      '<table><thead><tr><th>Term</th><th>City</th><th>Sent</th><th>Last</th></tr></thead>' +
+      '<tbody>' + body + '</tbody></table>' +
+      '<div class="sub">' + total + ' request' + (total === 1 ? '' : 's') +
+      ' across ' + rows.length + ' combination' + (rows.length === 1 ? '' : 's') + '</div></section>';
+  }
+
   function reportHtml(opts) {
     const o = opts || {};
     const q = o.quota || weekQuota([], Date.now());
@@ -977,6 +1006,7 @@
       '<section><h2>Requests over time — ' + escapeHtml(o.rangeLabel || '') + '</h2>' +
       chartSvg(buckets, { width: 680, height: 200 }) +
       '<div class="sub">' + total + ' request' + (total === 1 ? '' : 's') + ' in this period</div></section>' +
+      statsSection(o.stats) +
       '<section><h2>Contacts (' + records.length + ')</h2><table><thead><tr>' +
       CSV_COLUMNS.map((c) => '<th>' + escapeHtml(c[0]) + '</th>').join('') +
       '</tr></thead><tbody>' + rows + '</tbody></table></section>' +
@@ -1072,6 +1102,247 @@
   function updateCheckDue(info, now) {
     const at = info && typeof info.checkedAt === 'number' ? info.checkedAt : 0;
     return (now - at) >= UPDATE_CHECK_INTERVAL_MS;
+  }
+
+  // --- search catalogue: term × city, and what each combination has sent -------
+
+  //: The three groups are the user's own segmentation and they carry meaning
+  //: beyond the picker — ops separates `direkt` from `multiplikator` contacts
+  //: the same way. Order is the order they are worked in, so it is preserved.
+  const TERM_GROUPS = [
+    { key: 'direkt', label: 'Direkte Kunden' },
+    { key: 'branchen', label: 'Branchen / Unternehmen' },
+    { key: 'multi', label: 'Multiplikatoren' }
+  ];
+
+  const DEFAULT_TERMS = {
+    direkt: [
+      'Geschäftsführer', 'Inhaber', 'CEO', 'Managing Director', 'COO',
+      'Head of Operations', 'Operations Manager', 'Business Operations Manager',
+      'Process Manager', 'Business Process Manager', 'Process Excellence Manager',
+      'Operational Excellence Manager', 'Digitalisierungsmanager',
+      'Digital Transformation Manager', 'Leiter Digitalisierung', 'CFO',
+      'Head of Finance', 'Kaufmännischer Leiter', 'Head of Accounting',
+      'Leiter Buchhaltung', 'Controller', 'Head of IT', 'IT-Leiter', 'IT Manager',
+      'CIO', 'CTO'
+    ],
+    branchen: [
+      'Immobilienverwaltung', 'Hausverwaltung', 'Property Management',
+      'Facility Management', 'Bauunternehmen', 'Bauzulieferer', 'Gebäudetechnik',
+      'Spedition', 'Logistik', 'Fulfillment', 'Großhandel', 'Maschinenbau',
+      'Elektrotechnik', 'Medizintechnik', 'Pharma', 'Gesundheitswesen',
+      'Arztpraxis', 'Medizinisches Versorgungszentrum', 'Pflegeunternehmen',
+      'Personaldienstleister', 'Ingenieurbüro', 'Planungsbüro', 'Steuerberatung',
+      'Wirtschaftsprüfung', 'Rechtsanwaltskanzlei', 'Versicherungsmakler',
+      'Versicherungen', 'Energieunternehmen'
+    ],
+    multi: [
+      'Steuerberater', 'Wirtschaftsprüfer', 'Datenschutzbeauftragter',
+      'Datenschutzberater', 'IT-Systemhaus', 'MSP', 'IT-Berater',
+      'IT-Sicherheitsberater', 'Cybersecurity Consultant', 'ERP-Berater',
+      'DATEV-Berater', 'Unternehmensberater', 'Digitalisierungsberater',
+      'Prozessberater', 'Automatisierungsberater'
+    ]
+  };
+
+  const DEFAULT_CITIES = ['Berlin', 'Darmstadt', 'Frankfurt', 'Hamburg', 'Düsseldorf'];
+
+  const TERM_MAX = 100;          // a LinkedIn search term, not an essay
+  const TERMS_PER_GROUP_MAX = 300;
+  const CITIES_MAX = 100;
+  //: Distinct combinations kept. The planned catalogue is ~350; the cap only
+  //: guards against a long tail of hand-typed one-off searches.
+  const STATS_CAP = 1000;
+
+  function dedupeStrings(list, max) {
+    const out = [];
+    const seen = new Set();
+    for (const raw of Array.isArray(list) ? list : []) {
+      const value = normalizeSpace(raw).slice(0, TERM_MAX);
+      if (!value) continue;
+      const key = value.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(value);
+      if (out.length >= max) break;
+    }
+    return out;
+  }
+
+  // A stored term list, coerced into shape. A missing group falls back to the
+  // default; an EMPTY group stays empty — deleting a whole group is a decision,
+  // not damage, and re-seeding it would fight the user.
+  function normalizeTerms(raw) {
+    const src = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {};
+    const out = {};
+    for (const g of TERM_GROUPS) {
+      out[g.key] = Array.isArray(src[g.key])
+        ? dedupeStrings(src[g.key], TERMS_PER_GROUP_MAX)
+        : DEFAULT_TERMS[g.key].slice();
+    }
+    return out;
+  }
+
+  function normalizeCities(raw) {
+    if (!Array.isArray(raw)) return DEFAULT_CITIES.slice();
+    return dedupeStrings(raw, CITIES_MAX);
+  }
+
+  function termCount(terms) {
+    const t = normalizeTerms(terms);
+    return TERM_GROUPS.reduce((n, g) => n + t[g.key].length, 0);
+  }
+
+  // The search LinkedIn opens for one combination. The city rides in the
+  // keywords, exactly as it was typed by hand before — so the term that comes
+  // back off the URL is the same string this key was built from.
+  function searchQueryFor(term, city) {
+    return normalizeSpace(normalizeSpace(term) + ' ' + normalizeSpace(city));
+  }
+
+  function searchUrlFor(term, city) {
+    const q = searchQueryFor(term, city);
+    if (!q) return '';
+    return 'https://www.linkedin.com/search/results/people/?keywords=' +
+      encodeURIComponent(q) + '&origin=GLOBAL_SEARCH_HEADER';
+  }
+
+  // Whole-word test — "Berlin" must not match inside "Berliner Sparkasse", and
+  // a multi-word city ("Frankfurt am Main") has to match as one unit.
+  function cityAt(query, city) {
+    const q = normalizeSpace(query).toLowerCase();
+    const c = normalizeSpace(city).toLowerCase();
+    if (!q || !c) return -1;
+    let from = 0;
+    for (;;) {
+      const at = q.indexOf(c, from);
+      if (at < 0) return -1;
+      const before = at === 0 ? ' ' : q[at - 1];
+      const after = at + c.length >= q.length ? ' ' : q[at + c.length];
+      if (/\s/.test(before) && /\s/.test(after)) return at;
+      from = at + 1;
+    }
+  }
+
+  // Split a sent search term back into "what" and "where", against the USER'S
+  // OWN city list — not a gazetteer. That is the whole scope: these are the
+  // cities they work, and the picker built most of these queries itself.
+  // No city found is a normal answer ("Leiter Digitalisierung"), not a failure.
+  function splitQuery(query, cities) {
+    const q = normalizeSpace(query);
+    if (!q) return { term: '', city: '' };
+    let best = null;
+    for (const city of normalizeCities(cities)) {
+      const at = cityAt(q, city);
+      if (at < 0) continue;
+      // Prefer the city furthest right (the "<term> <city>" habit), and among
+      // those the longest name — "Frankfurt am Main" beats "Frankfurt".
+      if (!best || at > best.at || (at === best.at && city.length > best.city.length)) {
+        best = { at, city };
+      }
+    }
+    if (!best) return { term: q, city: '' };
+    const term = normalizeSpace(q.slice(0, best.at) + ' ' + q.slice(best.at + best.city.length));
+    // The city comes back in the spelling of the LIST, not of the query: the
+    // key is case-insensitive either way, but a table that shows "berlin" or
+    // "Berlin" depending on who wrote last reads like two different places.
+    return { term, city: best.city };
+  }
+
+  //: `|` cannot appear in a key because it is stripped from terms and cities.
+  function statsKey(term, city) {
+    return normalizeSpace(term).toLowerCase().replace(/\|/g, ' ') + '|' +
+      normalizeSpace(city).toLowerCase().replace(/\|/g, ' ');
+  }
+
+  function normalizeStats(raw) {
+    const src = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {};
+    const out = {};
+    for (const key of Object.keys(src)) {
+      const e = src[key];
+      if (!e || typeof e !== 'object') continue;
+      const n = Math.floor(Number(e.n));
+      if (!Number.isFinite(n) || n <= 0) continue;
+      out[key] = {
+        term: normalizeSpace(e.term),
+        city: normalizeSpace(e.city),
+        n,
+        first: Number(e.first) || 0,
+        last: Number(e.last) || 0
+      };
+    }
+    return out;
+  }
+
+  // Count one sent request against its combination. Without a term there is
+  // nothing to count — a request sent off a profile page is still a request,
+  // and `lcEvents` (the quota) counts it; only this breakdown skips it.
+  function bumpStat(stats, term, city, when) {
+    const t = normalizeSpace(term);
+    if (!t) return stats && typeof stats === 'object' ? stats : {};
+    const ts = Number(when) || Date.now();
+    const key = statsKey(t, city);
+    const next = Object.assign({}, normalizeStats(stats));
+    const cur = next[key];
+    next[key] = {
+      // Keep the spelling first seen — the key ignores case, the label should
+      // not flicker between "CTO Berlin" and "cto berlin".
+      term: (cur && cur.term) ? cur.term : t,
+      city: (cur && cur.city) ? cur.city : normalizeSpace(city),
+      n: (cur ? cur.n : 0) + 1,
+      first: cur && cur.first ? cur.first : ts,
+      last: ts
+    };
+    const over = Object.keys(next).length - STATS_CAP;
+    if (over > 0) {
+      // Evict the combinations idle longest — never the one just written. The
+      // fresh key is taken OUT of the candidates before slicing: skipping it
+      // inside the loop deletes one too few and the cap creeps up (a test
+      // caught exactly that, with a fresh entry carrying the oldest stamp).
+      const evictable = Object.keys(next).filter((k) => k !== key)
+        .sort((a, b) => (next[a].last || 0) - (next[b].last || 0));
+      for (const k of evictable.slice(0, over)) delete next[k];
+    }
+    return next;
+  }
+
+  // The starting stand, read once out of the contact log. Best-effort by
+  // nature: the log is deduplicated and capped, so it under-reports a long
+  // history — but it reproduces a hand-kept tally exactly where the log still
+  // reaches. One pass, no per-record re-sorting (the 619 ms lesson).
+  function backfillStats(log, cities) {
+    const list = normalizeCities(cities);
+    const out = {};
+    for (const r of Array.isArray(log) ? log : []) {
+      if (!r || typeof r !== 'object') continue;
+      const { term, city } = splitQuery(searchQueryOf(r), list);
+      if (!term) continue;
+      const key = statsKey(term, city);
+      const ts = Date.parse(r.ts) || 0;
+      const cur = out[key];
+      if (cur) {
+        cur.n += 1;
+        if (ts && (!cur.first || ts < cur.first)) cur.first = ts;
+        if (ts > cur.last) cur.last = ts;
+      } else {
+        out[key] = { term, city, n: 1, first: ts, last: ts };
+      }
+    }
+    return out;
+  }
+
+  function statCountFor(stats, term, city) {
+    const e = normalizeStats(stats)[statsKey(term, city)];
+    return e ? e.n : 0;
+  }
+
+  // Flat rows for a table: most sent first, then most recent, then by name so
+  // the order never wobbles between renders.
+  function statsRows(stats) {
+    const s = normalizeStats(stats);
+    return Object.keys(s).map((k) => s[k]).sort((a, b) =>
+      (b.n - a.n) || ((b.last || 0) - (a.last || 0)) ||
+      a.term.localeCompare(b.term) || a.city.localeCompare(b.city));
   }
 
   // --- ops blocklist: the back channel (ops → extension) -----------------------
@@ -1372,6 +1643,22 @@
     buildRecord,
     searchQueryFrom,
     searchQueryOf,
+    TERM_GROUPS,
+    DEFAULT_TERMS,
+    DEFAULT_CITIES,
+    STATS_CAP,
+    normalizeTerms,
+    normalizeCities,
+    termCount,
+    searchQueryFor,
+    searchUrlFor,
+    splitQuery,
+    statsKey,
+    normalizeStats,
+    bumpStat,
+    backfillStats,
+    statCountFor,
+    statsRows,
     appendRecord,
     profileIdsFromLog,
     CSV_COLUMNS,
@@ -1398,6 +1685,7 @@
     chartSvg,
     escapeHtml,
     reportHtml,
+    statsSection,
     reportFilename,
     htmlDataUrl,
     BACKUP_APP,

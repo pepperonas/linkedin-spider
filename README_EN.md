@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.13.0-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.14.0-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/github/v/release/pepperonas/linkedin-spider?style=flat-square&label=release" alt="Latest Release">
   <img src="https://img.shields.io/github/release-date/pepperonas/linkedin-spider?style=flat-square&label=released" alt="Release Date">
   <img src="https://img.shields.io/badge/manifest-v3-green?style=flat-square&logo=googlechrome&logoColor=white" alt="Manifest V3">
@@ -48,7 +48,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/tests-510_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-571_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
   <img src="https://img.shields.io/badge/tested_with-Vitest-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest">
   <img src="https://img.shields.io/badge/DOM-jsdom-15a2bb?style=flat-square" alt="jsdom">
   <img src="https://img.shields.io/badge/assertions-mutation--probed-success?style=flat-square" alt="Mutation-probed">
@@ -153,6 +153,8 @@ The self-healing loop: the API path breaks → the click fallback kicks in → L
 - **Activity chart** with a selectable period (7 d / 30 d / 90 d / 1 year) — in the popup and in the HTML report
 - **Contact log** — every sent request is stored permanently (name, date, profile URL, headline, company, location, connection degree, profile ID, send path, search term, search page)
 - **The search term is recorded** — searching for "hausverwaltung Berlin" or "CTO Frankfurt" puts the segment **and** the city into the log and into the ops sync; the result card itself often does not name the location
+- **Search picker in the overlay** — 69 delivered terms in three groups × your cities, one click opens the search; catalogue and cities are editable on the options page
+- **A tally per term + city** — the extension keeps the count itself (Kaufmännischer Leiter · Berlin · 100), survives *Clear Log*, and shows in the picker, on the options page and in the HTML report
 - **CSV export** — spreadsheet-ready (semicolon + UTF-8 BOM), file name with a date stamp
 - **HTML report export** — a self-contained file with the chart, the quota and the contact table, no external assets
 - **Backup & restore** — export and re-import every stored value as JSON; strict import
@@ -337,6 +339,29 @@ the keys travel (`linkedin.com/in/…`) — no names, companies or reasons.
   sync. Options page → Status → **Refresh list** fetches it by hand; size and age are shown there too.
 - A change takes effect **immediately**, even in a running tab (`chrome.storage.onChanged`).
 
+**Picking and counting searches (from 2.14.0, the 🕸️ badge on LinkedIn):**
+
+Clicking the badge opens the **picker**: cities on top, then a filter box and the catalogue in three
+groups — **Direkte Kunden**, **Branchen / Unternehmen**, **Multiplikatoren** (69 terms out of the box).
+Clicking a term opens the matching LinkedIn search (term + city, exactly as you would type it). Next to
+each term stands **how many requests** that combination has already sent — this replaces the tally on
+the notepad.
+
+- The picker **only navigates**. It never arms the run; that stays the one deliberate switch in the popup.
+- Entries are **real links** — middle-click opens a new tab, the keyboard reaches them, Enter in the
+  filter box takes the first hit.
+- Counting happens **on send**, into `lcStats`, and is not computed from the log: the log is capped at
+  5000 and can be wiped with *Clear Log*, the tally survives both (same reasoning as `lcEvents` for the
+  quota).
+- A **hand-typed** search counts too, as long as its city is on your list. A search without a city lands
+  honestly under "—" rather than under a guessed one.
+- On the first start after the update the tally is **seeded once from the existing log**; after that only
+  sends count. An empty tally is a state (your *Reset tally*) and is never re-seeded.
+- For that the badge now also appears on the **feed** — that is where a cold start begins. On profiles
+  and in messaging it stays away, as before.
+- Editing the lists and the full table: **options page → Searches** (one term per line, *Restore
+  defaults*, *Reset tally*). The HTML report carries the table along.
+
 **Pacing (from 2.12.0, options page → Pacing):**
 
 A run used to probe for the next card exactly every 1.5 s — a metronome you can recognise.
@@ -404,6 +429,10 @@ Everything lives in `chrome.storage.local` — in the Chrome profile on your mac
 | `lcLastApiError` | LinkedIn's last rejection (status, first 300 characters of the reply) — for diagnosis on the options page | — |
 | `lcUpdate` | Result of the last update check (only after your click, at most daily) | — |
 | `lcPace` | Pacing settings: jitter, hourly/daily caps, stop at % of the week (default: jitter on, no caps) | options page |
+| `lcTerms` | The search catalogue: three groups (direct clients, industries, multipliers), each a list of terms | options page |
+| `lcCities` | The cities that are worked | options page |
+| `lcStats` | Tally per "term + city" combination (max. 1000 combinations) — **survives Clear Log**, because it counts sends, not log rows | "Reset tally" on the options page |
+| `lcCity` | The city last picked in the in-page picker | — |
 | `lcBlock` | The do-not-contact list from ops: normalised profile keys (`linkedin.com/in/…`), count, fetch time — no names | replaced by the next sync |
 
 ### What leaves the browser
@@ -455,7 +484,7 @@ npx vitest run test/lib.test.js          # one file
 npx vitest run -t "buildInviteRequest"    # one test
 ```
 
-**510 unit and integration tests** with Vitest + jsdom (the timezone is pinned to `Europe/Berlin` in `vitest.config.js` — the quota and chart maths are calendar-local, and the bug naive millisecond arithmetic causes only exists where clocks actually shift):
+**571 unit and integration tests** with Vitest + jsdom (the timezone is pinned to `Europe/Berlin` in `vitest.config.js` — the quota and chart maths are calendar-local, and the bug naive millisecond arithmetic causes only exists where clocks actually shift):
 
 | File | Checks |
 |---|---|
@@ -463,6 +492,8 @@ npx vitest run -t "buildInviteRequest"    # one test
 | `test/interceptor.test.js` | **loads `interceptor.js` for real** in jsdom: a captured `fetch`/XHR invite is posted as a recipe, anything else is not, POST only, own origin only — plus a parity test of the heuristic against `lib.js` (the file carries its own copy because the MAIN world cannot see `window.LC`) |
 | `test/export.test.js` | name cleaning, card scraping, CSV generation (quoting, injection guard, BOM), file name, log cap |
 | `test/search-query.test.js` | the term from the search URL (encodings, fragment, non-search pages), fallback for older entries, CSV column, ops field, backup round trip |
+| `test/searches.test.js` | catalogue and cities (normalising, dedupe, an emptied group stays empty), search URL incl. the round trip through `searchQueryFrom`, splitting into term + city (whole words, the list's spelling), counting, cap eviction, seeding from the log |
+| `test/content-picker.test.js` | loads `content.js` for real: the picker opens from the badge, one link per term with the chosen city, the tally per combination, filtering, Esc/click-outside, never arms the run, counting on send, one-time seeding |
 | `test/stats.test.js` | quota maths (calendar week, rolling 7 days, clamping), bucketing per period, DST nights, SVG chart (scaling, running column, escaping, empty state) |
 | `test/backup.test.js` | backup format, secret stripping, strict import validation (foreign/damaged/too-new files) |
 | `test/report.test.js` | HTML report: self-containment (no script, no external reference), escaping of scraped names, quota/period figures, empty state |
@@ -527,6 +558,25 @@ triggers `.github/workflows/release.yml`: tests → ZIP → GitHub Release. The 
 | Update does not arrive | Old extension version cached | `chrome://extensions` → Update, reload the tab; check the version in the popup footer |
 
 ## Changelog
+
+### 2.14.0 — Search picker and a tally per term + city
+
+- ✨ **Picker in the overlay** (click the 🕸️ badge): 69 delivered terms in three groups × your cities,
+  a filter box, one click opens the LinkedIn search. Entries are real links — middle-click, keyboard and
+  Enter in the filter therefore work by themselves
+- ✨ **A tally per combination** (`lcStats`): next to every term stands how many requests "term + city"
+  has already sent. Counted **on send**, not computed from the log — that is capped and can be wiped
+  with *Clear Log*, the tally survives both
+- ✨ **Options page → Searches**: edit catalogue and cities (one term per line, *Restore defaults*),
+  the full table with a filter, *Reset tally*. The HTML report carries the table, so does the backup
+- 🧠 On the first start the tally is **seeded once from the existing log** — which reproduces a
+  hand-kept count exactly. An empty tally is a state and is never re-seeded
+- 🧠 The picker **never** arms the run; a hand-typed search still counts, and a search without a city
+  lands under "—" instead of under a guessed one
+- ⚠️ The badge now also appears on the **feed** (a cold start begins there, and it is the way into the
+  picker); on profiles and in messaging it stays away
+- 🧪 2 new suites (`searches`, `content-picker`), 44 new tests, every assertion mutated once — one probe
+  found a real bug in the eviction at the combination cap
 
 ### 2.13.0 — The search term in the log
 

@@ -28,6 +28,7 @@ let enabled = false;
 let log = [];             // stored contact log, read straight from storage
 let events = [];          // stored send timestamps — the quota/chart series
 let range = LC.CHART_RANGES[0].key;
+let stats = {};           // sent requests per "term + city" — for the report
 let clearArmed = false;   // "Clear Log" is a two-step confirm (no confirm() in a popup)
 let pendingRestore = null; // a validated backup waiting for the second click
 let lastChartKey = '';    // fingerprint guard — see renderStats()
@@ -195,7 +196,7 @@ function renderLog() {
 }
 
 function loadState() {
-  chrome.storage.local.get(['lcLog', 'lcEvents', 'lcRange', 'lcOps', 'lcOpsState', 'lcOpsLast', 'lcUpdate', 'lcBlock'], (result) => {
+  chrome.storage.local.get(['lcLog', 'lcEvents', 'lcRange', 'lcOps', 'lcOpsState', 'lcOpsLast', 'lcUpdate', 'lcBlock', 'lcStats'], (result) => {
     renderVersion(result.lcUpdate);
     log = Array.isArray(result.lcLog) ? result.lcLog : [];
     events = LC.normalizeEvents(result.lcEvents);
@@ -204,6 +205,7 @@ function loadState() {
     opsState = (result.lcOpsState && typeof result.lcOpsState === 'object') ? result.lcOpsState : {};
     opsLast = result.lcOpsLast || null;
     opsBlock = result.lcBlock ? LC.normalizeBlock(result.lcBlock) : null;
+    stats = LC.normalizeStats(result.lcStats);
     syncChips();
     renderLog();
     renderStats();
@@ -323,6 +325,7 @@ reportBtn.addEventListener('click', () => {
     quota: LC.weekQuota(events, now.getTime()),
     buckets: LC.bucketEvents(events, range, now.getTime()),
     records: log,
+    stats,
     rangeLabel: LC.rangeByKey(range).label,
     generatedAt: now,
     version: VERSION

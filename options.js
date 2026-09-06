@@ -23,11 +23,25 @@ const versionEl = document.getElementById('version');
 const updateBtn = document.getElementById('ops-update');
 const updateResult = document.getElementById('update-result');
 const stApiError = document.getElementById('st-apierror');
+const catCities = document.getElementById('cat-cities');
+const catDirekt = document.getElementById('cat-direkt');
+const catBranchen = document.getElementById('cat-branchen');
+const catMulti = document.getElementById('cat-multi');
+const catSave = document.getElementById('cat-save');
+const catReset = document.getElementById('cat-reset');
+const catHint = document.getElementById('cat-hint');
+const catFilter = document.getElementById('cat-filter');
+const catTally = document.getElementById('cat-tally');
+const catClear = document.getElementById('cat-clear');
+const tallyHint = document.getElementById('tally-hint');
+const catBoxes = { direkt: catDirekt, branchen: catBranchen, multi: catMulti };
 
 const VERSION = (chrome.runtime && chrome.runtime.getManifest) ? (chrome.runtime.getManifest().version || '') : '';
 if (versionEl) versionEl.textContent = VERSION ? 'v' + VERSION : '';
 
 let forgetArmed = false;
+let clearArmed = false;
+let tally = {};
 
 function say(message, isError) {
   hint.textContent = message || '';
@@ -180,12 +194,16 @@ paceSaveBtn.addEventListener('click', async () => {
 });
 
 async function load() {
-  const { lcOps, lcPace } = await storageGet(['lcOps', 'lcPace']);
+  const { lcOps, lcPace, lcTerms, lcCities, lcStats } =
+    await storageGet(['lcOps', 'lcPace', 'lcTerms', 'lcCities', 'lcStats']);
   const s = lcOps || {};
   urlEl.value = s.baseUrl || LC.OPS_DEFAULT_URL;
   tokenEl.value = s.token || '';
   autoEl.checked = !!s.auto;
   fillPace(lcPace);
+  fillCatalogue(LC.normalizeTerms(lcTerms), LC.normalizeCities(lcCities));
+  tally = LC.normalizeStats(lcStats);
+  renderTally();
   await renderStatus();
 }
 
@@ -264,6 +282,102 @@ forgetBtn.addEventListener('click', async () => {
   await storageSet({ lcOpsState: {}, lcOpsLast: null });
   say('Sync state cleared.');
   await renderStatus();
+});
+
+
+// --- Searches: the catalogue and the per-combination tally ------------------
+
+const lines = (list) => (list || []).join('\n');
+const fromLines = (text) => String(text || '').split('\n');
+
+function fillCatalogue(terms, cities) {
+  catCities.value = lines(cities);
+  for (const key of Object.keys(catBoxes)) catBoxes[key].value = lines(terms[key]);
+}
+
+function renderTally() {
+  const needle = (catFilter.value || '').trim().toLowerCase();
+  const rows = LC.statsRows(tally).filter((r) =>
+    !needle || (r.term + ' ' + r.city).toLowerCase().includes(needle));
+  catTally.textContent = '';
+  if (!rows.length) {
+    const p = document.createElement('div');
+    p.className = 'empty';
+    p.textContent = Object.keys(tally).length
+      ? 'Nothing matches that filter.'
+      : 'Nothing sent yet — the tally fills as requests go out.';
+    catTally.appendChild(p);
+    return;
+  }
+  const table = document.createElement('table');
+  const head = document.createElement('tr');
+  for (const [label, cls] of [['Term', ''], ['City', ''], ['Sent', 'num'], ['Last', '']]) {
+    const th = document.createElement('th');
+    th.textContent = label;
+    if (cls) th.className = cls;
+    head.appendChild(th);
+  }
+  table.appendChild(head);
+  for (const r of rows) {
+    const tr = document.createElement('tr');
+    // Terms and cities are user text — set, never parsed into markup.
+    for (const [value, cls] of [[r.term, ''], [r.city || '—', ''], [String(r.n), 'num'],
+      [r.last ? LC.formatTimestamp(new Date(r.last).toISOString()) : '', '']]) {
+      const td = document.createElement('td');
+      td.textContent = value;
+      if (cls) td.className = cls;
+      tr.appendChild(td);
+    }
+    table.appendChild(tr);
+  }
+  catTally.appendChild(table);
+}
+
+catFilter.addEventListener('input', renderTally);
+
+catSave.addEventListener('click', async () => {
+  const terms = LC.normalizeTerms({
+    direkt: fromLines(catDirekt.value),
+    branchen: fromLines(catBranchen.value),
+    multi: fromLines(catMulti.value)
+  });
+  const cities = LC.normalizeCities(fromLines(catCities.value));
+  await storageSet({ lcTerms: terms, lcCities: cities });
+  // Show what was actually stored: blanks and duplicates are dropped on the
+  // way in, and a field that silently disagrees with storage is a lie.
+  fillCatalogue(terms, cities);
+  catHint.textContent = LC.termCount(terms) + ' terms · ' + cities.length + ' cities saved.';
+  catHint.className = 'hint';
+});
+
+catReset.addEventListener('click', async () => {
+  const terms = LC.normalizeTerms(null);
+  const cities = LC.normalizeCities(null);
+  await storageSet({ lcTerms: terms, lcCities: cities });
+  fillCatalogue(terms, cities);
+  catHint.textContent = 'Back to the delivered lists.';
+  catHint.className = 'hint';
+});
+
+catClear.addEventListener('click', async () => {
+  if (!clearArmed) {
+    clearArmed = true;
+    catClear.textContent = 'Really reset?';
+    catClear.classList.add('armed');
+    tallyHint.textContent = 'This clears the counts only — contacts, quota and ops sync are untouched.';
+    tallyHint.className = 'hint';
+    return;
+  }
+  clearArmed = false;
+  catClear.textContent = 'Reset tally';
+  catClear.classList.remove('armed');
+  // Empty, not absent: "undefined" would make the content script seed it from
+  // the log again and undo exactly what was just asked for.
+  await storageSet({ lcStats: {} });
+  tally = {};
+  renderTally();
+  tallyHint.textContent = 'Tally reset.';
+  tallyHint.className = 'hint';
 });
 
 load();

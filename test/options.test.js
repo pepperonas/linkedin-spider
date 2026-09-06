@@ -384,3 +384,97 @@ describe('options page: the do-not-contact list from ops', () => {
     expect($('block-hint').className).toMatch(/error/);
   });
 });
+
+describe('the search catalogue on the options page', () => {
+  beforeEach(() => { mountOptions(); setupChrome(); });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  const box = (id) => document.getElementById(id);
+
+  it('shows the delivered lists when nothing is stored', async () => {
+    await loadOptions();
+    expect(box('cat-cities').value.split('\n')).toEqual(globalThis.LC.DEFAULT_CITIES);
+    expect(box('cat-direkt').value.split('\n').length).toBe(globalThis.LC.DEFAULT_TERMS.direkt.length);
+  });
+
+  it('saves what was typed, one term per line', async () => {
+    await loadOptions();
+    box('cat-direkt').value = 'CTO\nCIO';
+    box('cat-cities').value = 'Berlin\nKöln';
+    box('cat-save').click();
+    await flush();
+    expect(storage.lcTerms.direkt).toEqual(['CTO', 'CIO']);
+    expect(storage.lcCities).toEqual(['Berlin', 'Köln']);
+  });
+
+  // A field that keeps showing what storage rejected is a lie about the state.
+  it('writes back the cleaned lists so the fields match storage', async () => {
+    await loadOptions();
+    box('cat-direkt').value = '  CTO \n\n cto\nCIO';
+    box('cat-save').click();
+    await flush();
+    expect(box('cat-direkt').value).toBe('CTO\nCIO');
+  });
+
+  it('restores the delivered lists', async () => {
+    storage.lcTerms = { direkt: ['Nur eins'], branchen: [], multi: [] };
+    await loadOptions();
+    box('cat-reset').click();
+    await flush();
+    expect(storage.lcTerms.direkt).toEqual(globalThis.LC.DEFAULT_TERMS.direkt);
+    expect(box('cat-direkt').value).toContain('Geschäftsführer');
+  });
+
+  it('lists the tally, most sent first', async () => {
+    storage.lcStats = {
+      'cto|berlin': { term: 'CTO', city: 'Berlin', n: 100, first: 1, last: 1757000000000 },
+      'msp|hamburg': { term: 'MSP', city: 'Hamburg', n: 7, first: 1, last: 1757000000000 }
+    };
+    await loadOptions();
+    const rows = Array.from(document.querySelectorAll('#cat-tally tr')).slice(1);
+    expect(rows.map((r) => r.children[0].textContent)).toEqual(['CTO', 'MSP']);
+    expect(rows[0].children[2].textContent).toBe('100');
+  });
+
+  it('shows a combination without a city as such', async () => {
+    storage.lcStats = { 'x|': { term: 'Leiter Digitalisierung', city: '', n: 64, first: 1, last: 1 } };
+    await loadOptions();
+    expect(document.querySelector('#cat-tally tr:nth-child(2) td:nth-child(2)').textContent).toBe('—');
+  });
+
+  it('filters the tally', async () => {
+    storage.lcStats = {
+      'cto|berlin': { term: 'CTO', city: 'Berlin', n: 3, first: 1, last: 1 },
+      'msp|hamburg': { term: 'MSP', city: 'Hamburg', n: 2, first: 1, last: 1 }
+    };
+    await loadOptions();
+    const f = document.getElementById('cat-filter');
+    f.value = 'hamburg';
+    f.dispatchEvent(new Event('input'));
+    const rows = Array.from(document.querySelectorAll('#cat-tally tr')).slice(1);
+    expect(rows.map((r) => r.children[0].textContent)).toEqual(['MSP']);
+  });
+
+  it('needs two clicks to reset the tally, and writes it empty rather than absent', async () => {
+    storage.lcStats = { 'cto|berlin': { term: 'CTO', city: 'Berlin', n: 3, first: 1, last: 1 } };
+    await loadOptions();
+    const btn = document.getElementById('cat-clear');
+    btn.click();
+    await flush();
+    expect(storage.lcStats).not.toEqual({});     // first click only arms
+    btn.click();
+    await flush();
+    // Empty, not deleted: "undefined" would make the content script seed it
+    // from the log again and undo the reset.
+    expect(storage.lcStats).toEqual({});
+    expect(document.querySelector('#cat-tally .empty')).toBeTruthy();
+  });
+
+  it('reaches every element it addresses', async () => {
+    const src = fs.readFileSync(path.resolve('options.js'), 'utf8');
+    const ids = [...src.matchAll(/getElementById\('([^']+)'\)/g)].map((m) => m[1]);
+    mountOptions();
+    for (const id of ids) expect(document.getElementById(id), id + ' missing in options.html').toBeTruthy();
+  });
+});
+

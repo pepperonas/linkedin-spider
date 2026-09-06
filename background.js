@@ -136,6 +136,13 @@ importScripts('lib.js');
       checkUpdate(!!msg.force).then(sendResponse);
       return true;
     }
+    // A content script cannot open the options page — the worker can. The
+    // picker's "Edit lists" goes through here.
+    if (msg.action === 'openOptions') {
+      try { chrome.runtime.openOptionsPage(); } catch (e) { /* no options page */ }
+      sendResponse({ ok: true });
+      return false;
+    }
     if (msg.action === 'opsSync') {
       runSync('manual').then(sendResponse);
       return true; // async response
