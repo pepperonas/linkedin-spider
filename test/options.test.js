@@ -168,7 +168,7 @@ describe('options page: status + sync', () => {
   it('counts synced, pending and rejected', async () => {
     storage.lcOps = { baseUrl: 'https://ops.celox.io', token: TOKEN, auto: false };
     storage.lcLog = [rec('A'), rec('B'), rec('C'), rec('D')];
-    storage.lcOpsState = { A: { status: 'ok' }, B: { status: 'ok' }, C: { status: 'invalid' } };
+    storage.lcOpsState = { A: { status: 'ok', v: globalThis.LC.OPS_ROW_VERSION }, B: { status: 'ok', v: globalThis.LC.OPS_ROW_VERSION }, C: { status: 'invalid' } };
     await loadOptions();
     expect($('st-synced').textContent).toBe('2');
     expect($('st-invalid').textContent).toBe('1');
@@ -201,12 +201,12 @@ describe('options page: status + sync', () => {
   it('forgetting the sync state takes two clicks and only clears the state', async () => {
     storage.lcOps = { baseUrl: 'https://ops.celox.io', token: TOKEN };
     storage.lcLog = [rec('A')];
-    storage.lcOpsState = { A: { status: 'ok' } };
+    storage.lcOpsState = { A: { status: 'ok', v: globalThis.LC.OPS_ROW_VERSION } };
     storage.lcOpsLast = { at: 1, sent: 1 };
     await loadOptions();
     $('ops-forget').click();
     await flush();
-    expect(storage.lcOpsState).toEqual({ A: { status: 'ok' } });   // armed only
+    expect(storage.lcOpsState).toEqual({ A: { status: 'ok', v: globalThis.LC.OPS_ROW_VERSION } });   // armed only
     expect($('ops-forget').textContent).toMatch(/really/i);
     $('ops-forget').click();
     await flush();
@@ -475,6 +475,43 @@ describe('the search catalogue on the options page', () => {
     const ids = [...src.matchAll(/getElementById\('([^']+)'\)/g)].map((m) => m[1]);
     mountOptions();
     for (const id of ids) expect(document.getElementById(id), id + ' missing in options.html').toBeTruthy();
+  });
+});
+
+describe('what the options page says about the tally sync', () => {
+  beforeEach(() => { mountOptions(); setupChrome(); storage.lcOps = { baseUrl: 'https://ops.celox.io', token: 'ops_' + 'x'.repeat(40) }; });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it('reports what was delivered', async () => {
+    storage.lcOpsLast = { at: Date.now(), sent: 1, created: 1, updated: 0, unchanged: 0, tally: { ok: true, sent: 4 } };
+    await loadOptions();
+    expect(document.getElementById('st-tally').textContent).toContain('4 combinations reported');
+  });
+
+  // An ops without the route is a state to name, not an error to hide.
+  it('says plainly when this ops cannot take the tally', async () => {
+    storage.lcOpsLast = { at: Date.now(), sent: 0, created: 0, updated: 0, unchanged: 0, tally: { ok: false, unsupported: true } };
+    await loadOptions();
+    const el = document.getElementById('st-tally');
+    expect(el.textContent).toContain('does not take the tally yet');
+    expect(el.className).not.toContain('error');   // not a fault
+  });
+
+  it('marks a real delivery failure as an error', async () => {
+    storage.lcOpsLast = { at: Date.now(), sent: 0, created: 0, updated: 0, unchanged: 0, tally: { ok: false, error: 'ops answered 500' } };
+    await loadOptions();
+    expect(document.getElementById('st-tally').className).toContain('error');
+  });
+
+  it('mentions an ops that does not read position and city', async () => {
+    storage.lcOpsCaps = { searchFields: false, at: 1 };
+    await loadOptions();
+    expect(document.getElementById('st-tally').textContent).toContain('position and city');
+  });
+
+  it('stays empty when there is nothing to report', async () => {
+    await loadOptions();
+    expect(document.getElementById('st-tally').textContent).toBe('');
   });
 });
 

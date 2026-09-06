@@ -215,6 +215,17 @@ The badge is no longer only a status pill: clicking it opens `#lc-picker`, a pan
 - Measured in a browser against the shipped CSS (a harness that cuts `PICKER_CSS` out of `content.js`): panel 320 px, fits at 1024×600, no horizontal overflow, worst contrast 5.83:1. The first cut had a three-line footer — the promise now sits under the head as `.lc-p-note`, the footer holds only the state (ellipsis) and the button (`nowrap`).
 - ⚠️ **A mutation probe that only checks "the file changed" is not proof it took effect.** The feed-visibility probe reported BLIND at first; the nested shell quoting had mangled the replacement into something harmless. Repeated cleanly it fires. Verify the intended LINE changed, not just the file.
 
+## The ops row contract, and how it grows (v2.15.0)
+
+A pushed row carries `search_term` and `search_city` next to the raw `search_query`. The extension does the split (`splitQuery` against the user's own city list) because it **knows** rather than guesses — the picker built the query from a term and a city. `null` means "no city", never a guess, and the city travels in the list's spelling.
+
+- ⚠️ **`batch.map(opsRowFor)` is a trap.** `Array.map` passes the index as the second argument, so `cities` would arrive as `0` and `normalizeCities(0)` answers with the DEFAULTS — every custom city silently gone from the push. Found by reading, pinned with a city outside the defaults (`Kiel`).
+- **`OPS_ROW_VERSION` + `lcOpsState[…].v`:** an acknowledged contact is pending again once the row shape grows, and is pushed exactly once more. Without it, every field added later would reach only contacts synced after the update, and the user would have to know that "Forget sync state" exists. `invalid` is unaffected — a URL that is not a profile never becomes one.
+- **`accepted_fields` (optional, ops side):** if ops echoes which fields it read, `opsCapsFrom`/`opsCapsGained` catch the moment ops learns them and the worker clears the stamps once (`opsClearRowVersions`) so the next run delivers. Only on the false→true transition: re-pushing while ops keeps saying yes would be a loop, and re-pushing on first contact is pointless (that run already sent the fields).
+- ⚠️ **The capability can only be learned while pushing** — with nothing pending there is no response to read. Hence the probe: nothing pending AND ops last said `false` ⇒ one empty preview (`rows: []`, `commit: false`, writes nothing). Deliberately **not** when ops has never said anything: today's ops sends no echo, and pinging it on every click for a signal it does not send is chatter.
+- **The tally goes to its own route** (`OPS_TALLY_PATH`), after the leads, with the full state rather than a delta. `OPS_NOT_THERE` (404/405/501) reads as "this ops cannot do it yet" and never fails a sync whose leads went through — the leads are the work, the counts are the report. It is skipped entirely when the lead push failed.
+- ⚠️ **A mutation that is equivalent under the fixture proves nothing.** The probe "send rows instead of `[]`" stayed green because in that test `pending` *is* `[]`. Sharpened to a literal non-empty array, it fires. Check what the mutant means in the fixture, not just that the file changed.
+
 ## Releasing
 
 `git tag vX.Y.Z && git push --tags` triggers `.github/workflows/release.yml`: tests → ZIP → GitHub Release.
@@ -223,7 +234,7 @@ The badge is no longer only a status pill: clicking it opens `#lc-picker`, a pan
 
 ## Versioning
 
-SemVer. The user-facing version lives in `manifest.json` (currently **2.14.0**) and is shown in the popup footer, read via `chrome.runtime.getManifest().version` — never hard-coded. `package.json` used to lag independently (it sat at 2.4.0 through five releases); since 2.9.0 the two must match and `test/version.test.js` pins that, along with the version badge in both READMEs and the presence of a `### <version>` changelog heading. Bump `manifest.json` + `package.json` + both README badges + both changelogs together.
+SemVer. The user-facing version lives in `manifest.json` (currently **2.15.0**) and is shown in the popup footer, read via `chrome.runtime.getManifest().version` — never hard-coded. `package.json` used to lag independently (it sat at 2.4.0 through five releases); since 2.9.0 the two must match and `test/version.test.js` pins that, along with the version badge in both READMEs and the presence of a `### <version>` changelog heading. Bump `manifest.json` + `package.json` + both README badges + both changelogs together.
 
 ## Testing conventions
 

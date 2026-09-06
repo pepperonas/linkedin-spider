@@ -1350,6 +1350,14 @@
   // are customers already, contacts marked as no longer in their role. The
   // worker fetches the `linkedin_norm` keys, the content script matches the
   // card's profile URL against them BEFORE sending.
+  //: The per-combination tally. Aggregate, not lead data, so it has its own
+  //: endpoint — and its own failure mode: an ops that does not know the route
+  //: yet must not turn a successful lead push into a failed sync.
+  const OPS_TALLY_PATH = '/api/rainmaker/leads/import/linkedin-spider/tally';
+  //: Statuses that mean "this ops does not have the route", as opposed to
+  //: "the route is there and something went wrong".
+  const OPS_NOT_THERE = [404, 405, 501];
+
   const OPS_BLOCKLIST_PATH = '/api/rainmaker/leads/import/linkedin-spider/blocklist';
 
   // ⚠️ Mirror of ops `services/lead_dedup.py::norm_linkedin`, pinned with the
@@ -1486,8 +1494,20 @@
     return s ? s : null;
   }
 
-  function opsRowFor(record) {
+  //: Bumped whenever a row carries something new. An acknowledged contact
+  //: whose stamp is older is pushed once more — otherwise the fields added in
+  //: an update would never reach the leads that were synced before it, and the
+  //: user would have to know about "Forget sync state" to get them there.
+  const OPS_ROW_VERSION = 2;
+
+  // `cities` is the user's own list, so "Kaufmännischer Leiter Berlin" arrives
+  // as a position AND a place instead of one string ops has to guess at.
+  // ⚠️ Never pass this straight to `Array.map` — the second argument would be
+  // the index, and `normalizeCities(0)` quietly answers with the defaults.
+  function opsRowFor(record, cities) {
     const r = record || {};
+    const query = searchQueryOf(r);
+    const where = splitQuery(query, cities);
     return {
       profile_url: normalizeSpace(r.profileUrl),
       name: nullIfEmpty(r.name),
@@ -1498,7 +1518,9 @@
       profile_id: nullIfEmpty(r.profileId),
       method: nullIfEmpty(r.method),
       page_url: nullIfEmpty(r.pageUrl),
-      search_query: nullIfEmpty(searchQueryOf(r)),
+      search_query: nullIfEmpty(query),
+      search_term: nullIfEmpty(where.term),
+      search_city: nullIfEmpty(where.city),
       ts: nullIfEmpty(r.ts)
     };
   }
@@ -1513,7 +1535,10 @@
       if (!normalizeSpace(r.profileUrl)) continue;
       const key = opsRecordKey(r);
       const entry = st[key];
-      if (entry && (entry.status === 'ok' || entry.status === 'invalid')) continue;
+      // `invalid` is final — a URL that is not a profile never becomes one.
+      // `ok` holds only as long as it was acknowledged for THIS row shape.
+      if (entry && entry.status === 'invalid') continue;
+      if (entry && entry.status === 'ok' && Number(entry.v || 1) >= OPS_ROW_VERSION) continue;
       out.push(r);
     }
     return out;
@@ -1542,7 +1567,8 @@
         status: acknowledged ? 'ok' : (decision === 'invalid' ? 'invalid' : 'error'),
         decision,
         leadId: row.lead_id || null,
-        at: now
+        at: now,
+        v: OPS_ROW_VERSION
       };
       if (row.error) entry.error = row.error;
       next[key] = entry;
@@ -1569,13 +1595,82 @@
   // same function runs in the service worker, in tests, and in Node against a
   // real server. Never throws: the error lands in `summary.error` and the
   // state keeps only what ops acknowledged, so the next run retries the rest.
+  // What the tally looks like on the wire. Timestamps as ISO — ops parses
+  // those everywhere else too; a raw epoch would be a second convention.
+  function opsTallyRows(stats) {
+    return statsRows(stats).map((r) => ({
+      term: r.term,
+      city: r.city || null,
+      sent: r.n,
+      first_at: r.first ? new Date(r.first).toISOString() : null,
+      last_at: r.last ? new Date(r.last).toISOString() : null
+    }));
+  }
+
+  // Push the tally. Deliberately forgiving: nothing here may fail a sync whose
+  // leads went through — the counts are a report, the leads are the work.
+  async function opsPushTally(opts) {
+    const o = opts || {};
+    const settings = o.settings || {};
+    const base = opsNormalizeUrl(settings.baseUrl);
+    const rows = opsTallyRows(o.stats);
+    if (!rows.length) return { ok: true, sent: 0, skipped: 'nothing counted yet' };
+    if (!base || !opsValidToken(settings.token)) return { ok: false, error: 'not configured' };
+    const fetchFn = o.fetchFn || (typeof fetch === 'function' ? fetch : null);
+    if (!fetchFn) return { ok: false, error: 'no fetch available' };
+    try {
+      const resp = await fetchFn(base + OPS_TALLY_PATH, {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + settings.token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows })
+      });
+      if (OPS_NOT_THERE.includes(resp.status)) {
+        return { ok: false, unsupported: true, status: resp.status, sent: 0,
+          error: 'this ops does not take the tally yet' };
+      }
+      if (!resp.ok) return { ok: false, status: resp.status, sent: 0, error: 'ops answered ' + resp.status };
+      return { ok: true, sent: rows.length, status: resp.status };
+    } catch (e) {
+      return { ok: false, sent: 0, error: 'ops unreachable: ' + (e && e.message ? e.message : String(e)) };
+    }
+  }
+
+  // What this ops understood of the row. Present only once ops echoes it;
+  // absent means "unknown", never "no".
+  function opsCapsFrom(result) {
+    const list = result && Array.isArray(result.accepted_fields) ? result.accepted_fields : null;
+    if (!list) return null;
+    return { searchFields: list.includes('search_term') && list.includes('search_city'), at: Date.now() };
+  }
+
+  // Did ops just LEARN to read the search fields? Then the contacts it already
+  // acknowledged were stored without them, and they are worth one more push.
+  // Only on the transition — otherwise every sync would re-push everything.
+  function opsCapsGained(before, after) {
+    if (!after || !after.searchFields) return false;
+    return !!(before && before.searchFields === false);
+  }
+
+  // Drop the row stamp off every acknowledged entry: they become pending once,
+  // get pushed with the fields ops can now read, and are stamped again.
+  function opsClearRowVersions(state) {
+    const next = {};
+    for (const key of Object.keys(state && typeof state === 'object' ? state : {})) {
+      const e = state[key];
+      next[key] = (e && e.status === 'ok') ? Object.assign({}, e, { v: 0 }) : e;
+    }
+    return next;
+  }
+
   async function opsSyncRun(opts) {
     const o = opts || {};
     const settings = o.settings || {};
     const now = typeof o.now === 'number' ? o.now : Date.now();
     const base = opsNormalizeUrl(settings.baseUrl);
     let state = Object.assign({}, o.state && typeof o.state === 'object' ? o.state : {});
-    const summary = { at: now, sent: 0, created: 0, updated: 0, unchanged: 0, invalid: 0, errors: 0, error: null };
+    const summary = { at: now, sent: 0, created: 0, updated: 0, unchanged: 0, invalid: 0, errors: 0,
+      error: null, tally: null, caps: null };
+    const cities = normalizeCities(o.cities);
 
     if (!opsValidToken(settings.token)) {
       summary.error = 'No valid ops API token configured';
@@ -1597,7 +1692,7 @@
             'Authorization': 'Bearer ' + settings.token,
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ rows: batch.map(opsRowFor), commit: true })
+          body: JSON.stringify({ rows: batch.map((r) => opsRowFor(r, cities)), commit: true })
         });
         if (!resp.ok) {
           let detail = '';
@@ -1611,12 +1706,40 @@
         break;
       }
       state = applyOpsResult(state, batch, result, now);
+      const caps = opsCapsFrom(result);
+      if (caps) summary.caps = caps;
       summary.sent += batch.length;
       summary.created += result.created || 0;
       summary.updated += result.updated || 0;
       summary.unchanged += result.unchanged || 0;
       summary.invalid += result.invalid || 0;
       summary.errors += result.errors || 0;
+    }
+
+    // Nothing to push, and ops told us LAST time that it cannot read the search
+    // fields? Then ask once — an EMPTY PREVIEW, no rows, commit false, writes
+    // nothing. Without it the capability could only be learned while pushing,
+    // and a fully synced extension would never notice that ops caught up.
+    // ⚠️ Only for an ops that answered `false`: an ops that says nothing at all
+    // (today's) must not be pinged on every click for a signal it never sends.
+    if (!summary.error && !pending.length && o.caps && o.caps.searchFields === false) {
+      try {
+        const resp = await fetchFn(base + OPS_IMPORT_PATH, {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + settings.token, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rows: [], commit: false })
+        });
+        if (resp.ok) {
+          const caps = opsCapsFrom(await resp.json());
+          if (caps) summary.caps = caps;
+        }
+      } catch (e) { /* a probe that fails changes nothing */ }
+    }
+
+    // The tally goes last and cannot fail the run: the leads are the work, the
+    // counts are the report. An ops without the route says so and is believed.
+    if (!summary.error && o.stats && Object.keys(o.stats).length) {
+      summary.tally = await opsPushTally({ settings, stats: o.stats, fetchFn });
     }
     return { state, summary, error: summary.error };
   }
@@ -1702,6 +1825,14 @@
     OPS_BATCH_SIZE,
     opsRecordKey,
     opsRowFor,
+    OPS_ROW_VERSION,
+    OPS_TALLY_PATH,
+    OPS_NOT_THERE,
+    opsTallyRows,
+    opsPushTally,
+    opsCapsFrom,
+    opsCapsGained,
+    opsClearRowVersions,
     opsPending,
     opsBatches,
     applyOpsResult,

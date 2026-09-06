@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.14.0-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.15.0-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/github/v/release/pepperonas/linkedin-spider?style=flat-square&label=release" alt="Latest Release">
   <img src="https://img.shields.io/github/release-date/pepperonas/linkedin-spider?style=flat-square&label=released" alt="Release Date">
   <img src="https://img.shields.io/badge/manifest-v3-green?style=flat-square&logo=googlechrome&logoColor=white" alt="Manifest V3">
@@ -48,7 +48,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/tests-571_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-605_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
   <img src="https://img.shields.io/badge/tested_with-Vitest-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest">
   <img src="https://img.shields.io/badge/DOM-jsdom-15a2bb?style=flat-square" alt="jsdom">
   <img src="https://img.shields.io/badge/assertions-mutation--probed-success?style=flat-square" alt="Mutation-probed">
@@ -307,7 +307,9 @@ sequenceDiagram
     BG->>ST: read lcOps, lcLog, lcOpsState
     BG->>OPS: POST /api/rainmaker/leads/import/linkedin-spider<br/>Bearer ops_… · rows[] · commit:true
     OPS-->>BG: per row: create / update / unchanged / invalid
-    BG->>ST: lcOpsState[profile] = ok · lcOpsLast = summary
+    BG->>OPS: POST …/linkedin-spider/tally<br/>the count per "term + city"
+    Note over BG,OPS: 404/405/501 = this ops cannot do it yet — the sync still succeeds
+    BG->>ST: lcOpsState[profile] = ok · lcOpsCaps · lcOpsLast = summary
     Note over BG,OPS: on failure (401, network): nothing marked — the next run retries
 ```
 
@@ -323,6 +325,41 @@ Optionally enable **"Sync automatically"**.
   is shown in the popup row. What ops rejects as invalid (no LinkedIn profile URL) is not retried forever.
 - **What the extension cannot claim:** that a request was accepted. It only sees the send; `connected`
   is set by hand in ops.
+
+**What a row carries (from 2.15.0):**
+
+| Field | Content |
+|---|---|
+| `profile_url` | The dedup key. Nothing is sent without it. |
+| `name` · `company` · `headline` · `location` · `degree` · `profile_id` | What the result card showed |
+| `method` | `api` or `click` |
+| `page_url` | The search page the request went out from |
+| `search_query` | The raw search term as typed (`hausverwaltung Berlin`) |
+| **`search_term`** | The **position/industry** out of it (`hausverwaltung`) |
+| **`search_city`** | The **city** out of it, in your list's spelling (`Berlin`), otherwise `null` |
+| `ts` | Time of the send |
+
+The extension splits it because it **knows** rather than guesses: the picker built the search from a
+term and a city, and you maintain the city list yourself. A search without a city yields `null` —
+never a guessed one.
+
+**What happens when the row grows:** every acknowledged contact remembers which row shape ops
+confirmed it in. When fields are added it counts as **pending once more** and is pushed again — ops
+idempotently fills only what is missing. Without that rule the leads you had already synced would
+never see the position, and you would have to know about "Forget sync state". After the update the
+popup therefore shows pending contacts once; one sync later it says "all synced" again.
+
+**The tally (from 2.15.0):** after the leads, the worker reports the count per combination to
+`POST …/import/linkedin-spider/tally` (`term`, `city`, `sent`, `first_at`, `last_at`) — the full
+state, not a delta. That is the tally sheet, not lead data. **If your ops does not know the route yet
+(404/405/501) the sync still counts as successful** and the options page says so plainly: the leads
+are the work, the tally is the report.
+
+**How the extension notices that ops caught up:** if ops answers with `accepted_fields`, the extension
+remembers whether position and city were read. When that flips from "no" to "yes" it pushes the
+already-acknowledged contacts **once** more. If ops says nothing about it, nothing bad happens —
+"Forget sync state" is then the manual route. With nothing pending and ops having last said "no", the
+worker asks with an **empty preview** (`rows: []`, `commit: false`) — which writes nothing.
 
 **Back channel: ops says whom not to ask again (from 2.12.0):**
 
@@ -424,6 +461,7 @@ Everything lives in `chrome.storage.local` — in the Chrome profile on your mac
 | `lcOps` | ops address, API token, auto-sync switch | options page |
 | `lcOpsState` | Per contact: acknowledged by ops / invalid / error (kept apart from `lcLog` so the worker and the content script never write the same list) | "Forget sync state" |
 | `lcOpsLast` | Summary of the last sync run | "Forget sync state" |
+| `lcOpsCaps` | What ops last reported about the row fields it reads (`accepted_fields`) — drives the one-time re-push | "Forget sync state" |
 | `lcSeen` | Durable list of contacted profile IDs (max. 100,000, ~20 bytes each) — the duplicate guard beyond the log's FIFO cap; seeded once from the log on the first run after 2.11.0 | Clear Log |
 | `lcHalt` | Reason and time when the circuit breaker (5 failures in a row) stopped the run | switching on again |
 | `lcLastApiError` | LinkedIn's last rejection (status, first 300 characters of the reply) — for diagnosis on the options page | — |
@@ -484,7 +522,7 @@ npx vitest run test/lib.test.js          # one file
 npx vitest run -t "buildInviteRequest"    # one test
 ```
 
-**571 unit and integration tests** with Vitest + jsdom (the timezone is pinned to `Europe/Berlin` in `vitest.config.js` — the quota and chart maths are calendar-local, and the bug naive millisecond arithmetic causes only exists where clocks actually shift):
+**605 unit and integration tests** with Vitest + jsdom (the timezone is pinned to `Europe/Berlin` in `vitest.config.js` — the quota and chart maths are calendar-local, and the bug naive millisecond arithmetic causes only exists where clocks actually shift):
 
 | File | Checks |
 |---|---|
@@ -558,6 +596,31 @@ triggers `.github/workflows/release.yml`: tests → ZIP → GitHub Release. The 
 | Update does not arrive | Old extension version cached | `chrome://extensions` → Update, reload the tab; check the version in the popup footer |
 
 ## Changelog
+
+### 2.15.0 — The ops sync carries position, city and the tally
+
+- ✨ **Position and city as their own fields** (`search_term`, `search_city`) next to the raw
+  `search_query`. The extension splits because it **knows**: the picker built the search from a term
+  and a city, and the user maintains the city list. Without a city it sends `null`, never a guess; the
+  city travels in the list's spelling
+- ✨ **The tally goes along** to the new route `…/import/linkedin-spider/tally` (`term`, `city`, `sent`,
+  `first_at`, `last_at`) — the full state, not a delta. **If ops does not know the route (404/405/501)
+  the sync still succeeds**: the leads are the work, the tally is the report
+- ✨ **Contacts already synced are pushed once more** when the row shape grows (`lcOpsState[…].v`
+  against `OPS_ROW_VERSION`). Without it the 164 leads already in ops would never have seen the
+  position, and you would have to know about "Forget sync state". Exactly **once** — no endless push
+- ✨ **ops may say what it read** (`accepted_fields` in the import response). When that flips from "no"
+  to "yes" the extension re-pushes the acknowledged contacts once. With nothing pending and ops having
+  last said "no" it asks with an **empty preview** (`rows: []`, `commit: false`) — which writes
+  nothing. If ops says nothing at all, it is never pinged
+- 🐛 **A real find while reading:** `batch.map(opsRowFor)` would have handed the **array index** to the
+  city list — `normalizeCities(0)` answers with the delivered cities, so every custom city would have
+  silently dropped out of the push. Pinned with a city outside the defaults
+- 🧩 Options page → Status says plainly what happened to the tally and whether this ops reads position
+  and city
+- 📦 New `lcOpsCaps`; `docs/prompt-ops-suchbegriff.md` describes both new contracts for the ops side
+- 🧪 **+29 tests** (600 total), 11 mutation probes — one of them was an invalid mutant (`rows: pending`
+  equals `rows: []` for an empty list) and was sharpened
 
 ### 2.14.0 — Search picker and a tally per term + city
 

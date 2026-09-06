@@ -38,6 +38,9 @@ const rec = (id) => ({ ts: '2026-09-01T12:00:00.000Z', name: 'P' + id, profileUr
 
 // ops answers the import POST and — since 2.12.0 — the blocklist GET.
 let blocklistReply = { norms: ['linkedin.com/in/closed-one'], count: 1, generated_at: 't' };
+// Since 2.15.0: the tally route, and what ops echoes about the fields it read.
+let tallyReply = null;
+let acceptedFields = null;
 function okServer() {
   return async (url, init) => {
     if ((init.method || 'GET') === 'GET') {
@@ -48,9 +51,14 @@ function okServer() {
     }
     const body = JSON.parse(init.body);
     fetchCalls.push({ url, auth: init.headers.Authorization, body });
-    return { ok: true, status: 200, json: async () => ({
-      created: body.rows.length, updated: 0, unchanged: 0, invalid: 0, errors: 0,
-      results: body.rows.map((r, i) => ({ index: i, decision: 'create', lead_id: 'L' + i, changes: [] })) }) };
+    if (url.includes('/tally')) {
+      if (typeof tallyReply === 'number') return { ok: false, status: tallyReply };
+      return { ok: true, status: 200, json: async () => ({ stored: body.rows.length }) };
+    }
+    const answer = { created: body.rows.length, updated: 0, unchanged: 0, invalid: 0, errors: 0,
+      results: body.rows.map((r, i) => ({ index: i, decision: 'create', lead_id: 'L' + i, changes: [] })) };
+    if (acceptedFields) answer.accepted_fields = acceptedFields;
+    return { ok: true, status: 200, json: async () => answer };
   };
 }
 
@@ -69,6 +77,8 @@ describe('background worker: ops sync', () => {
     vi.useFakeTimers();
     setupChrome();
     fetchCalls = [];
+    tallyReply = null;
+    acceptedFields = null;
     fetchImpl = okServer();
     globalThis.fetch = vi.fn((...a) => fetchImpl(...a));
   });
@@ -349,3 +359,99 @@ describe('background worker: update check (opt-in)', () => {
     expect(storage.lcUpdate).toBeUndefined();
   });
 });
+
+describe('background worker: positions and the tally', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    setupChrome();
+    fetchCalls = [];
+    tallyReply = null;
+    acceptedFields = null;
+    fetchImpl = okServer();
+    globalThis.fetch = vi.fn((...a) => fetchImpl(...a));
+    storage.lcOps = { baseUrl: 'https://ops.celox.io', token: TOKEN, auto: false };
+  });
+  afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+
+  const posts = (part) => fetchCalls.filter((c) => c.body && c.url.includes(part));
+
+  it('sends the position and the city with every contact', async () => {
+    storage.lcLog = [{ ...rec('A'), searchQuery: 'Kaufmännischer Leiter berlin' }];
+    storage.lcCities = ['Berlin'];
+    const handle = await loadWorker();
+    await send(handle, { action: 'opsSync' });
+    const row = posts('/import/linkedin-spider').find((c) => Array.isArray(c.body.rows) && c.body.rows.length).body.rows[0];
+    expect(row.search_term).toBe('Kaufmännischer Leiter');
+    expect(row.search_city).toBe('Berlin');
+  });
+
+  // The worker must hand the CONFIGURED cities down, not let Array.map pass an
+  // index into that argument — with the defaults, "Kiel" would vanish.
+  it('uses the cities the user configured, not the delivered ones', async () => {
+    storage.lcLog = [{ ...rec('A'), searchQuery: 'CTO Kiel' }];
+    storage.lcCities = ['Kiel'];
+    const handle = await loadWorker();
+    await send(handle, { action: 'opsSync' });
+    expect(posts('/import/linkedin-spider')[0].body.rows[0].search_city).toBe('Kiel');
+  });
+
+  it('reports the tally after the contacts and remembers the outcome', async () => {
+    storage.lcLog = [rec('A')];
+    storage.lcStats = { 'cto|berlin': { term: 'CTO', city: 'Berlin', n: 12, first: 1, last: 2 } };
+    const handle = await loadWorker();
+    const resp = await send(handle, { action: 'opsSync' });
+    const tally = posts('/tally');
+    expect(tally.length).toBe(1);
+    expect(tally[0].body.rows[0]).toMatchObject({ term: 'CTO', city: 'Berlin', sent: 12 });
+    expect(resp.ok).toBe(true);
+    expect(storage.lcOpsLast.tally).toMatchObject({ ok: true, sent: 1 });
+  });
+
+  it('still counts the sync a success when ops has no tally route', async () => {
+    storage.lcLog = [rec('A')];
+    storage.lcStats = { 'cto|berlin': { term: 'CTO', city: 'Berlin', n: 1, first: 1, last: 2 } };
+    tallyReply = 404;
+    const handle = await loadWorker();
+    const resp = await send(handle, { action: 'opsSync' });
+    expect(resp.ok).toBe(true);
+    expect(storage.lcOpsLast.created).toBe(1);
+    expect(storage.lcOpsLast.tally).toMatchObject({ unsupported: true });
+  });
+
+  it('remembers what ops said it understood', async () => {
+    storage.lcLog = [rec('A')];
+    acceptedFields = ['profile_url', 'search_query'];
+    const handle = await loadWorker();
+    await send(handle, { action: 'opsSync' });
+    expect(storage.lcOpsCaps).toMatchObject({ searchFields: false });
+  });
+
+  // The one case worth automating: ops gains the fields, so everything it
+  // acknowledged before was stored without them.
+  it('re-pushes the acknowledged contacts once when ops learns the fields', async () => {
+    storage.lcLog = [rec('A')];
+    storage.lcOpsState = { A: { status: 'ok', v: globalThis.LC.OPS_ROW_VERSION } };
+    storage.lcOpsCaps = { searchFields: false, at: 1 };
+    acceptedFields = ['search_term', 'search_city'];
+    const handle = await loadWorker();
+    await send(handle, { action: 'opsSync' });
+    await vi.advanceTimersByTimeAsync(50);
+    // First run had nothing pending; the gain cleared the stamps and the
+    // follow-up run delivered the contact again.
+    const rows = posts('/import/linkedin-spider').flatMap((c) => c.body.rows);
+    expect(rows.length).toBe(1);
+    expect(storage.lcOpsState.A.v).toBe(globalThis.LC.OPS_ROW_VERSION);
+  });
+
+  it('does not re-push while ops keeps saying yes', async () => {
+    storage.lcLog = [rec('A')];
+    storage.lcOpsState = { A: { status: 'ok', v: globalThis.LC.OPS_ROW_VERSION } };
+    storage.lcOpsCaps = { searchFields: true, at: 1 };
+    acceptedFields = ['search_term', 'search_city'];
+    const handle = await loadWorker();
+    await send(handle, { action: 'opsSync' });
+    await vi.advanceTimersByTimeAsync(50);
+    expect(posts('/import/linkedin-spider').flatMap((c) => c.body.rows).length).toBe(0);
+  });
+});
+

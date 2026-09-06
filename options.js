@@ -23,6 +23,7 @@ const versionEl = document.getElementById('version');
 const updateBtn = document.getElementById('ops-update');
 const updateResult = document.getElementById('update-result');
 const stApiError = document.getElementById('st-apierror');
+const stTally = document.getElementById('st-tally');
 const catCities = document.getElementById('cat-cities');
 const catDirekt = document.getElementById('cat-direkt');
 const catBranchen = document.getElementById('cat-branchen');
@@ -111,9 +112,26 @@ function renderApiError(e) {
     ' — HTTP ' + e.status + ': ' + (e.body || '(empty body)');
 }
 
+// What happened to the counts, and whether this ops reads the position fields.
+// Both are reports about the far end, so they say plainly when it cannot.
+function renderTallySync(last, caps) {
+  const t = last && last.tally;
+  const parts = [];
+  if (t) {
+    if (t.ok && t.sent) parts.push(t.sent + ' combination' + (t.sent === 1 ? '' : 's') + ' reported');
+    else if (t.ok) parts.push('nothing counted yet');
+    else if (t.unsupported) parts.push('this ops does not take the tally yet');
+    else parts.push('tally not delivered: ' + (t.error || 'unknown reason'));
+  }
+  if (caps && caps.searchFields === false) parts.push('this ops does not read position and city yet');
+  stTally.textContent = parts.length ? 'Tally · ' + parts.join(' · ') : '';
+  stTally.className = 'opt-help' + ((t && !t.ok && !t.unsupported) ? ' error' : '');
+}
+
 async function renderStatus() {
-  const { lcOps, lcLog, lcOpsState, lcOpsLast, lcUpdate, lcLastApiError, lcBlock } =
-    await storageGet(['lcOps', 'lcLog', 'lcOpsState', 'lcOpsLast', 'lcUpdate', 'lcLastApiError', 'lcBlock']);
+  const { lcOps, lcLog, lcOpsState, lcOpsLast, lcUpdate, lcLastApiError, lcBlock, lcOpsCaps } =
+    await storageGet(['lcOps', 'lcLog', 'lcOpsState', 'lcOpsLast', 'lcUpdate', 'lcLastApiError', 'lcBlock', 'lcOpsCaps']);
+  renderTallySync(lcOpsLast, lcOpsCaps);
   renderApiError(lcLastApiError);
   renderBlock(lcBlock, !!(lcOps && lcOps.token));
   if (lcUpdate && !updateResult.textContent) renderUpdate(Object.assign({ ok: true, cached: true }, lcUpdate));

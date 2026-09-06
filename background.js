@@ -18,6 +18,7 @@ importScripts('lib.js');
   const LOG = '[LC-bg]';
   const {
     opsSyncRun, opsNormalizeUrl, opsValidToken, OPS_IMPORT_PATH, opsFetchBlocklist,
+    opsCapsGained, opsClearRowVersions,
     UPDATE_API, UPDATE_ORIGIN, compareVersions, parseLatestRelease, updateCheckDue
   } = self.LC;
 
@@ -50,14 +51,35 @@ importScripts('lib.js');
   async function runSync(trigger) {
     if (running) { rerun = true; return running; }
     running = (async () => {
-      const { lcOps, lcLog, lcOpsState } = await get(['lcOps', 'lcLog', 'lcOpsState']);
+      const { lcOps, lcLog, lcOpsState, lcCities, lcStats, lcOpsCaps } =
+        await get(['lcOps', 'lcLog', 'lcOpsState', 'lcCities', 'lcStats', 'lcOpsCaps']);
       const settings = lcOps || {};
       if (!settings.token) {
         return { ok: false, summary: null, error: 'not configured' };
       }
-      const out = await opsSyncRun({ settings, log: lcLog, state: lcOpsState, now: Date.now() });
+      const out = await opsSyncRun({
+        settings, log: lcLog, state: lcOpsState, now: Date.now(),
+        cities: lcCities, stats: lcStats, caps: lcOpsCaps
+      });
+      // ops just learned to read the search fields? Then everything it already
+      // acknowledged was stored without them — drop the row stamps once so the
+      // next run delivers them, and run that pass right away.
+      let state = out.state;
+      let caps = lcOpsCaps || null;
+      if (out.summary && out.summary.caps) {
+        if (opsCapsGained(caps, out.summary.caps)) {
+          state = opsClearRowVersions(state);
+          rerun = true;
+          console.log(LOG, 'ops now reads the search fields — re-pushing the acknowledged contacts once');
+        }
+        caps = out.summary.caps;
+      }
       const blocklist = await refreshBlocklist(settings);
-      await set({ lcOpsState: out.state, lcOpsLast: Object.assign({ trigger, blocklist }, out.summary) });
+      await set({
+        lcOpsState: state,
+        lcOpsCaps: caps,
+        lcOpsLast: Object.assign({ trigger, blocklist }, out.summary)
+      });
       console.log(LOG, 'sync', trigger, JSON.stringify(out.summary));
       return { ok: !out.error, summary: out.summary, error: out.error, blocklist };
     })().catch((e) => ({ ok: false, summary: null, error: String(e && e.message || e) }))

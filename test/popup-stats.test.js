@@ -419,7 +419,7 @@ describe('popup: ops sync row', () => {
   it('counts what is still pending', async () => {
     storage.lcOps = { baseUrl: 'https://ops.celox.io', token: TOKEN };
     storage.lcLog = [rec('A'), rec('B'), rec('C')];
-    storage.lcOpsState = { A: { status: 'ok' } };
+    storage.lcOpsState = { A: { status: 'ok', v: globalThis.LC.OPS_ROW_VERSION } };
     await loadPopup();
     const st = document.getElementById('ops-status');
     expect(st.textContent).toBe('ops: 2 pending · 1 synced');
@@ -430,7 +430,7 @@ describe('popup: ops sync row', () => {
   it('reports all synced and disables the button when nothing is pending', async () => {
     storage.lcOps = { baseUrl: 'https://ops.celox.io', token: TOKEN };
     storage.lcLog = [rec('A')];
-    storage.lcOpsState = { A: { status: 'ok' } };
+    storage.lcOpsState = { A: { status: 'ok', v: globalThis.LC.OPS_ROW_VERSION } };
     await loadPopup();
     expect(document.getElementById('ops-status').textContent).toBe('ops: all synced (1)');
     expect(document.getElementById('ops-sync').disabled).toBe(true);
@@ -450,7 +450,7 @@ describe('popup: ops sync row', () => {
     storage.lcOps = { baseUrl: 'https://ops.celox.io', token: TOKEN };
     storage.lcLog = [rec('A'), rec('B')];
     await loadPopup();
-    workerReply = (() => { storage.lcOpsState = { A: { status: 'ok' }, B: { status: 'ok' } }; return { ok: true, summary: { sent: 2, created: 2, updated: 0, unchanged: 0 } }; })();
+    workerReply = (() => { storage.lcOpsState = { A: { status: 'ok', v: globalThis.LC.OPS_ROW_VERSION }, B: { status: 'ok', v: globalThis.LC.OPS_ROW_VERSION } }; return { ok: true, summary: { sent: 2, created: 2, updated: 0, unchanged: 0 } }; })();
     document.getElementById('ops-sync').click();
     await vi.advanceTimersByTimeAsync(10);
     expect(workerMessages.some((m) => m.action === 'opsSync')).toBe(true);
@@ -461,7 +461,7 @@ describe('popup: ops sync row', () => {
   it('tells how many profiles ops has closed — in the tooltip, the row stays one line', async () => {
     storage.lcOps = { baseUrl: 'https://ops.celox.io', token: TOKEN };
     storage.lcLog = [rec('A')];
-    storage.lcOpsState = { A: { status: 'ok' } };
+    storage.lcOpsState = { A: { status: 'ok', v: globalThis.LC.OPS_ROW_VERSION } };
     storage.lcBlock = { at: new Date(2026, 8, 3, 14, 5).getTime(), norms: ['linkedin.com/in/x', 'linkedin.com/in/y'], count: 2 };
     await loadPopup();
     const st = document.getElementById('ops-status');
@@ -475,7 +475,7 @@ describe('popup: ops sync row', () => {
       ? { active: true, count: 7, healed: false, contextGone: false, halted: null, paused: null, blocked: 3 } : { ok: true }); };
     storage.lcOps = { baseUrl: 'https://ops.celox.io', token: TOKEN };
     storage.lcLog = [rec('A')];
-    storage.lcOpsState = { A: { status: 'ok' } };
+    storage.lcOpsState = { A: { status: 'ok', v: globalThis.LC.OPS_ROW_VERSION } };
     await loadPopup();
     await vi.advanceTimersByTimeAsync(1100);
     expect(document.getElementById('ops-status').textContent).toBe('ops: all synced (1) · 3 skipped');
