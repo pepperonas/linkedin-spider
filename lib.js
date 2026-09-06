@@ -304,6 +304,7 @@
     ['Grad', (r) => r.degree],
     ['Profil-ID', (r) => r.profileId],
     ['Methode', (r) => r.method],
+    ['Suchbegriff', (r) => searchQueryOf(r)],
     ['Suchseite', (r) => r.pageUrl]
   ];
 
@@ -488,6 +489,34 @@
     return list.length > limit ? list.slice(list.length - limit) : list;
   }
 
+  // The words typed into LinkedIn's search box, read back off the search URL.
+  // "hausverwaltung Berlin" / "CTO Frankfurt" carries the segment AND the city
+  // — which the card itself often does not: where LinkedIn shows no location,
+  // the headline slides into that line, and ops measured 39 leads whose address
+  // was in truth a job title. The term is stored verbatim; interpreting it
+  // (city, segment) is ops' job, so there is one mapping and not two.
+  function searchQueryFrom(url) {
+    const s = String(url == null ? '' : url);
+    const q = s.indexOf('?');
+    if (q < 0) return '';
+    // Only a search page carries a search term. A profile URL's ?trk= does not,
+    // and a person is not a query.
+    if (!isSearchPage(s.slice(0, q))) return '';
+    const hash = s.indexOf('#', q);
+    const query = hash < 0 ? s.slice(q + 1) : s.slice(q + 1, hash);
+    let params;
+    try { params = new URLSearchParams(query); } catch (e) { return ''; }
+    return normalizeSpace(params.get('keywords'));
+  }
+
+  // The term of a stored record. Older entries predate the field but carry the
+  // search URL they were sent from, so the whole existing log answers too —
+  // no migration, and a re-sync enriches leads that are already in ops.
+  function searchQueryOf(record) {
+    const r = record || {};
+    return normalizeSpace(r.searchQuery) || searchQueryFrom(r.pageUrl);
+  }
+
   // Assemble one log entry: the card snapshot (taken BEFORE sending, LinkedIn
   // swaps the card out afterwards) plus what the send itself knows.
   function buildRecord(cardInfo, meta) {
@@ -507,7 +536,8 @@
       degree: c.degree || '',
       profileId,
       method: m.method || '',
-      pageUrl: m.pageUrl || ''
+      pageUrl: m.pageUrl || '',
+      searchQuery: normalizeSpace(m.searchQuery) || searchQueryFrom(m.pageUrl)
     };
   }
 
@@ -797,7 +827,7 @@
   const BACKUP_SCHEMA = 1;
   const BACKUP_KEYS = ['lcEnabled', 'lcCount', 'lcLog', 'lcEvents', 'lcRecipe', 'lcRange', 'lcSeen', 'lcPace'];
   const RECORD_FIELDS = ['ts', 'name', 'profileUrl', 'headline', 'company', 'location',
-    'degree', 'profileId', 'method', 'pageUrl'];
+    'degree', 'profileId', 'method', 'pageUrl', 'searchQuery'];
   // Headers that carry a live session. The recipe works without them (a fresh
   // CSRF token is injected on every send), so a backup file must not leak one.
   const SECRET_HEADERS = ['csrf-token', 'cookie', 'authorization', 'x-li-identity'];
@@ -1197,6 +1227,7 @@
       profile_id: nullIfEmpty(r.profileId),
       method: nullIfEmpty(r.method),
       page_url: nullIfEmpty(r.pageUrl),
+      search_query: nullIfEmpty(searchQueryOf(r)),
       ts: nullIfEmpty(r.ts)
     };
   }
@@ -1339,6 +1370,8 @@
     csvFilename,
     csvDataUrl,
     buildRecord,
+    searchQueryFrom,
+    searchQueryOf,
     appendRecord,
     profileIdsFromLog,
     CSV_COLUMNS,

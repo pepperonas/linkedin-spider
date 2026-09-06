@@ -208,7 +208,7 @@ describe('toCsv', () => {
 
   it('writes the German header row separated by semicolons', () => {
     const line = toCsv([]).replace(/^﻿/, '').split('\r\n')[0];
-    expect(line).toBe('"Datum";"Name";"Profil-URL";"Headline";"Firma";"Ort";"Grad";"Profil-ID";"Methode";"Suchseite"');
+    expect(line).toBe('"Datum";"Name";"Profil-URL";"Headline";"Firma";"Ort";"Grad";"Profil-ID";"Methode";"Suchbegriff";"Suchseite"');
   });
 
   it('emits header only for an empty log', () => {
@@ -229,7 +229,10 @@ describe('toCsv', () => {
   it('keeps a semicolon inside a field from breaking the column', () => {
     const row = toCsv([{ ...rec, headline: 'Dev; Ops; Alles' }]).split('\r\n')[1];
     expect(row).toContain('"Dev; Ops; Alles"');
-    expect(row.split('";"').length).toBe(10);
+    // As many fields as there are columns — a semicolon inside one must not
+    // invent an extra column. Counted against the column list so the guard does
+    // not go stale when a column is added; the header test pins WHICH columns.
+    expect(row.split('";"').length).toBe(globalThis.LC.CSV_COLUMNS.length);
   });
 
   it('flattens newlines and tabs inside a field to single spaces', () => {
@@ -252,7 +255,7 @@ describe('toCsv', () => {
   it('renders missing fields as empty columns instead of "undefined"', () => {
     const row = toCsv([{ name: 'Nur Name' }]).split('\r\n')[1];
     expect(row).not.toContain('undefined');
-    expect(row).toBe('"";"Nur Name";"";"";"";"";"";"";"";""');
+    expect(row).toBe('"";"Nur Name";"";"";"";"";"";"";"";"";""');
   });
 
   it('formats the timestamp as a readable local date-time', () => {
@@ -344,7 +347,8 @@ describe('buildRecord', () => {
       degree: '2.',
       profileId: 'ACoAAB1',
       method: 'api',
-      pageUrl: 'https://www.linkedin.com/search/results/people/?keywords=dev'
+      pageUrl: 'https://www.linkedin.com/search/results/people/?keywords=dev',
+      searchQuery: 'dev'
     });
   });
 

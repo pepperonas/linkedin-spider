@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.12.0-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.13.0-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/github/v/release/pepperonas/linkedin-spider?style=flat-square&label=release" alt="Latest Release">
   <img src="https://img.shields.io/github/release-date/pepperonas/linkedin-spider?style=flat-square&label=released" alt="Release Date">
   <img src="https://img.shields.io/badge/manifest-v3-green?style=flat-square&logo=googlechrome&logoColor=white" alt="Manifest V3">
@@ -48,7 +48,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/tests-489_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-510_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
   <img src="https://img.shields.io/badge/tested_with-Vitest-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest">
   <img src="https://img.shields.io/badge/DOM-jsdom-15a2bb?style=flat-square" alt="jsdom">
   <img src="https://img.shields.io/badge/assertions-mutation--probed-success?style=flat-square" alt="Mutation-probed">
@@ -151,7 +151,8 @@ The self-healing loop: the API path breaks → the click fallback kicks in → L
 - ON/OFF toggle via popup, request counter (persistent), API mode indicator (`default` / `self-healed ✓`)
 - **Weekly quota in the popup** — 200 free connection requests per week, used/remaining with a progress bar (plus the rolling 7-day figure); also shown on the in-page badge
 - **Activity chart** with a selectable period (7 d / 30 d / 90 d / 1 year) — in the popup and in the HTML report
-- **Contact log** — every sent request is stored permanently (name, date, profile URL, headline, company, location, connection degree, profile ID, send path, search page)
+- **Contact log** — every sent request is stored permanently (name, date, profile URL, headline, company, location, connection degree, profile ID, send path, search term, search page)
+- **The search term is recorded** — searching for "hausverwaltung Berlin" or "CTO Frankfurt" puts the segment **and** the city into the log and into the ops sync; the result card itself often does not name the location
 - **CSV export** — spreadsheet-ready (semicolon + UTF-8 BOM), file name with a date stamp
 - **HTML report export** — a self-contained file with the chart, the quota and the contact table, no external assets
 - **Backup & restore** — export and re-import every stored value as JSON; strict import
@@ -259,7 +260,10 @@ Every successful request lands in the log (`Saved contacts` in the popup). **⬇
 | Grad | Connection degree (`1.` / `2.` / `3.`) |
 | Profil-ID | LinkedIn member URN ID |
 | Methode | `api` (direct Voyager call) or `click` (fallback) |
+| Suchbegriff | The text typed into LinkedIn's search box (`hausverwaltung Berlin`) |
 | Suchseite | URL the request was triggered from |
+
+The **search term** is read off the search page's address bar (`?keywords=…`) and stored verbatim — it is ops that interprets it (city → the lead's address, segment as context). That way there is exactly **one** mapping instead of two that can drift apart. Set the city through LinkedIn's location filter instead of the search box and it is, consistently, not part of the term. Older log entries do not carry the field yet, but they do carry the search URL it is derived from — so export and sync answer for them retroactively.
 
 Card fields are best-effort: if LinkedIn changes its DOM, the affected column stays empty — sending is unaffected. The export reads `chrome.storage` directly, so it also works when the popup is opened over a non-LinkedIn tab. **Clear Log** wipes the log (two clicks) and thereby lifts the duplicate guard.
 
@@ -405,7 +409,7 @@ Everything lives in `chrome.storage.local` — in the Chrome profile on your mac
 ### What leaves the browser
 
 - **To LinkedIn:** the connection requests themselves (Voyager API) and the vanity lookup — nothing else.
-- **To celox ops:** **only if you have stored a token.** Then the contact-log fields (name, profile URL, headline, company, location, degree, profile ID, send path, search page, time) to the host in `lcOps.baseUrl` — and, the other way, the do-not-contact list (profile keys only). In ops the token authorises the import and reading that list, nothing else.
+- **To celox ops:** **only if you have stored a token.** Then the contact-log fields (name, profile URL, headline, company, location, degree, profile ID, send path, search term, search page, time) to the host in `lcOps.baseUrl` — and, the other way, the do-not-contact list (profile keys only). In ops the token authorises the import and reading that list, nothing else.
 - **To nobody else.** No telemetry, no analytics, no update check, no external assets in the exports.
 - The backup JSON strips session headers (`csrf-token`, `cookie`, `authorization`) from the stored recipe before writing the file.
 
@@ -451,13 +455,14 @@ npx vitest run test/lib.test.js          # one file
 npx vitest run -t "buildInviteRequest"    # one test
 ```
 
-**489 unit and integration tests** with Vitest + jsdom (the timezone is pinned to `Europe/Berlin` in `vitest.config.js` — the quota and chart maths are calendar-local, and the bug naive millisecond arithmetic causes only exists where clocks actually shift):
+**510 unit and integration tests** with Vitest + jsdom (the timezone is pinned to `Europe/Berlin` in `vitest.config.js` — the quota and chart maths are calendar-local, and the bug naive millisecond arithmetic causes only exists where clocks actually shift):
 
 | File | Checks |
 |---|---|
 | `test/lib.test.js` | core functions, self-healing helpers (recipe building, invite detection), multilingual detection |
 | `test/interceptor.test.js` | **loads `interceptor.js` for real** in jsdom: a captured `fetch`/XHR invite is posted as a recipe, anything else is not, POST only, own origin only — plus a parity test of the heuristic against `lib.js` (the file carries its own copy because the MAIN world cannot see `window.LC`) |
 | `test/export.test.js` | name cleaning, card scraping, CSV generation (quoting, injection guard, BOM), file name, log cap |
+| `test/search-query.test.js` | the term from the search URL (encodings, fragment, non-search pages), fallback for older entries, CSV column, ops field, backup round trip |
 | `test/stats.test.js` | quota maths (calendar week, rolling 7 days, clamping), bucketing per period, DST nights, SVG chart (scaling, running column, escaping, empty state) |
 | `test/backup.test.js` | backup format, secret stripping, strict import validation (foreign/damaged/too-new files) |
 | `test/report.test.js` | HTML report: self-containment (no script, no external reference), escaping of scraped names, quota/period figures, empty state |
@@ -522,6 +527,13 @@ triggers `.github/workflows/release.yml`: tests → ZIP → GitHub Release. The 
 | Update does not arrive | Old extension version cached | `chrome://extensions` → Update, reload the tab; check the version in the popup footer |
 
 ## Changelog
+
+### 2.13.0 — The search term in the log
+
+- ✨ **The search term is recorded.** Searching for "hausverwaltung Berlin" or "CTO Frankfurt" puts the segment **and** the city on the contact — the result card often does not name the location, and where LinkedIn has none the headline slides into the location line (measured in ops: 39 leads with a job title as their address). It reads `?keywords=…` off the search page and stores it **verbatim** — interpreting it (city, segment) happens in ops, so it stays one mapping instead of two
+- ✨ New CSV column **Suchbegriff** (before "Suchseite"), new ops field `search_query`; included in the backup
+- 🧠 **Retroactive without a migration:** older entries do not carry the field, but they do carry the search URL it is derived from — so export and sync answer for them. To enrich leads already pushed to ops, reset **Forget sync state** on the options page; ops is idempotent and only fills what is empty
+- 🧪 New suite `test/search-query.test.js` (20), 7 mutation probes; the column-count assertion now counts against the column list instead of a hard-coded 10
 
 ### 2.12.0 — Pacing and the back channel from ops
 

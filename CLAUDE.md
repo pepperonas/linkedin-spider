@@ -49,6 +49,7 @@ Two content-script worlds + the popup. The split between `lib.js` and `content.j
 Every successful request is appended to `chrome.storage.local['lcLog']` — an array of
 `{ ts, name, profileUrl, headline, company, location, degree, profileId, method, pageUrl }`, FIFO-capped at `LOG_CAP` (5000).
 
+- **The search term is part of the record** (`searchQuery`, v2.13.0) — see *Search term* below.
 - **The card is scraped BEFORE the send** (`extractCardInfo` in `tick()`, stored in `cardInfo`). LinkedIn replaces the card markup on success — reading afterwards yields nothing. Every field degrades to `''`; a LinkedIn DOM change empties a column, it never breaks the send.
 - `method` records which path won: `'api'` (Voyager recipe) or `'click'` (fallback).
 - **Writes re-read the log first** (`logRecord` does a fresh `storage.get` before `set`) so a second LinkedIn tab's entries aren't clobbered by a stale in-memory copy.
@@ -190,6 +191,16 @@ The READMEs are structured (TOC · At a glance · How it works · Features · In
 
 `test/interceptor.test.js` loads `interceptor.js` for real (stub `send` on `XMLHttpRequest.prototype` BEFORE arming, or jsdom hits the network) and pins the MAIN-world copy of the invite heuristic against `LC.isInviteRequest` with identical inputs — the "keep the two in sync" rule above finally has teeth. ⚠️ The POST-only rule needs a non-POST request WITH an invite body to be observable; with GET the missing body trips the URN guard first and the probe survives.
 
+## Search term (v2.13.0)
+
+`buildRecord` reads LinkedIn's `?keywords=…` off the page URL of the send (`searchQueryFrom`) and stores it as `searchQuery`; `opsRowFor` ships it as `search_query`, the CSV as the column **Suchbegriff**. "hausverwaltung Berlin" / "CTO Frankfurt" carries the segment AND the city.
+
+- **Why it is worth a field:** the result card frequently has no location, and where LinkedIn has none the headline slides into that line — ops measured **39** leads whose `address` was in truth a job title (`ist_ortsangabe` there exists to catch it). What the user searched for is the one honest source for the city.
+- **The extension does not interpret it.** No city list, no segment parsing — the term goes over verbatim and ops maps it, because the mapping is owned by ops (same rule as the CSV import) and a second parser is a second thing that drifts. The `norm_linkedin` parity rule is the cautionary tale.
+- ⚠️ **The term is only read on a search page** (`isSearchPage` on the part before `?`). A profile URL's `?trk=` is tracking, not a query; without the guard every logged profile page would contribute a bogus "term".
+- **`searchQueryOf(record)` = stored value, else derived from `pageUrl`.** Every record ever written carries the search URL, so the whole existing log answers retroactively — no migration. To enrich leads already in ops, reset the sync state (options page); ops is idempotent and only fills empty fields.
+- **A LinkedIn location FILTER is not in the term** (`geoUrn=[…]` is an opaque id). Documented as a limitation rather than guessed at from the filter pill's DOM.
+
 ## Releasing
 
 `git tag vX.Y.Z && git push --tags` triggers `.github/workflows/release.yml`: tests → ZIP → GitHub Release.
@@ -198,7 +209,7 @@ The READMEs are structured (TOC · At a glance · How it works · Features · In
 
 ## Versioning
 
-SemVer. The user-facing version lives in `manifest.json` (currently **2.12.0**) and is shown in the popup footer, read via `chrome.runtime.getManifest().version` — never hard-coded. `package.json` used to lag independently (it sat at 2.4.0 through five releases); since 2.9.0 the two must match and `test/version.test.js` pins that, along with the version badge in both READMEs and the presence of a `### <version>` changelog heading. Bump `manifest.json` + `package.json` + both README badges + both changelogs together.
+SemVer. The user-facing version lives in `manifest.json` (currently **2.13.0**) and is shown in the popup footer, read via `chrome.runtime.getManifest().version` — never hard-coded. `package.json` used to lag independently (it sat at 2.4.0 through five releases); since 2.9.0 the two must match and `test/version.test.js` pins that, along with the version badge in both READMEs and the presence of a `### <version>` changelog heading. Bump `manifest.json` + `package.json` + both README badges + both changelogs together.
 
 ## Testing conventions
 

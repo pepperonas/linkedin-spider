@@ -109,6 +109,20 @@ describe('content script contact log', () => {
     expect(storage.lcLog[0].pageUrl).toBe(location.href);
   });
 
+  // What was searched for is what says WHERE the lead sits — the card shows a
+  // headline where LinkedIn has no location for the person.
+  it('records the term that was searched for', async () => {
+    const back = location.href;
+    history.replaceState({}, '', '/search/results/people/?keywords=hausverwaltung%20Berlin');
+    try {
+      buildSearchCard();
+      await runOneTick();
+      expect(storage.lcLog[0].searchQuery).toBe('hausverwaltung Berlin');
+    } finally {
+      history.replaceState({}, '', back);
+    }
+  });
+
   it('writes nothing when the invitation fails', async () => {
     globalThis.fetch = vi.fn(() =>
       Promise.resolve({ ok: false, status: 500, text: () => Promise.resolve('boom') }));

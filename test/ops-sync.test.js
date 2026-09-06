@@ -10,7 +10,8 @@ const rec = (over) => ({
   ts: '2026-09-01T12:32:00.000Z', name: 'Max Mustermann',
   profileUrl: 'https://www.linkedin.com/in/max-mustermann', headline: 'Dev bei Acme',
   company: 'Acme', location: 'Berlin', degree: '2.', profileId: 'ACoAAB1',
-  method: 'api', pageUrl: 'https://www.linkedin.com/search/results/people/', ...over
+  method: 'api',
+  pageUrl: 'https://www.linkedin.com/search/results/people/?keywords=hausverwaltung%20Berlin', ...over
 });
 
 describe('record identity for the sync state', () => {
@@ -26,7 +27,9 @@ describe('opsRowFor — the shape ops expects', () => {
     expect(opsRowFor(rec())).toEqual({
       profile_url: 'https://www.linkedin.com/in/max-mustermann', name: 'Max Mustermann',
       company: 'Acme', headline: 'Dev bei Acme', location: 'Berlin', degree: '2.',
-      profile_id: 'ACoAAB1', method: 'api', page_url: 'https://www.linkedin.com/search/results/people/',
+      profile_id: 'ACoAAB1', method: 'api',
+      page_url: 'https://www.linkedin.com/search/results/people/?keywords=hausverwaltung%20Berlin',
+      search_query: 'hausverwaltung Berlin',
       ts: '2026-09-01T12:32:00.000Z'
     });
   });

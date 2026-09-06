@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.12.0-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.13.0-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/github/v/release/pepperonas/linkedin-spider?style=flat-square&label=release" alt="Latest Release">
   <img src="https://img.shields.io/github/release-date/pepperonas/linkedin-spider?style=flat-square&label=released" alt="Release Date">
   <img src="https://img.shields.io/badge/manifest-v3-green?style=flat-square&logo=googlechrome&logoColor=white" alt="Manifest V3">
@@ -48,7 +48,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/tests-489_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-510_passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests">
   <img src="https://img.shields.io/badge/tested_with-Vitest-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest">
   <img src="https://img.shields.io/badge/DOM-jsdom-15a2bb?style=flat-square" alt="jsdom">
   <img src="https://img.shields.io/badge/assertions-mutation--probed-success?style=flat-square" alt="Mutation-probed">
@@ -150,7 +150,8 @@ Die Selbstheilungs-Schleife: Bricht der API-Pfad → greift der Klick-Fallback �
 - AN/AUS-Schalter über Popup, Anfragen-Zähler (persistent), API-Modus-Anzeige (`default` / `self-healed ✓`)
 - **Wochenkontingent im Popup** — 200 freie Kontaktanfragen pro Woche, verbraucht/verbleibend mit Fortschrittsbalken (plus rollierender 7-Tage-Wert); steht auch im Seiten-Badge
 - **Verlaufs-Chart** mit wählbarem Zeitraum (7 d / 30 d / 90 d / 1 Jahr) — im Popup und im HTML-Report
-- **Kontaktprotokoll** — jede gesendete Anfrage wird dauerhaft gespeichert (Name, Datum, Profil-URL, Headline, Firma, Ort, Kontaktgrad, Profil-ID, Sendeweg, Suchseite)
+- **Kontaktprotokoll** — jede gesendete Anfrage wird dauerhaft gespeichert (Name, Datum, Profil-URL, Headline, Firma, Ort, Kontaktgrad, Profil-ID, Sendeweg, Suchbegriff, Suchseite)
+- **Suchbegriff wird mitgeschrieben** — wer „hausverwaltung Berlin" oder „CTO Frankfurt" sucht, hat Segment **und** Stadt im Protokoll und im ops-Sync; die Trefferkarte selbst nennt den Ort oft nicht
 - **CSV-Export** — Excel-fertig (Semikolon + UTF-8-BOM), Dateiname mit Datumsstempel
 - **HTML-Report-Export** — eigenständige Datei mit Chart, Kontingent und Kontakttabelle, ohne externe Assets
 - **Backup & Wiederherstellung** — alle Werte als JSON sichern und zurückspielen; strenger Import
@@ -259,7 +260,10 @@ Jede erfolgreiche Anfrage landet im Protokoll (`Saved contacts` im Popup). **⬇
 | Grad | Kontaktgrad (`1.` / `2.` / `3.`) |
 | Profil-ID | LinkedIn-Member-URN-ID |
 | Methode | `api` (direkter Voyager-Call) oder `click` (Fallback) |
+| Suchbegriff | Der in LinkedIns Suchfeld eingegebene Text (`hausverwaltung Berlin`) |
 | Suchseite | URL, auf der die Anfrage ausgelöst wurde |
+
+Der **Suchbegriff** wird aus der Adresszeile der Suchseite gelesen (`?keywords=…`) und unverändert gespeichert — gedeutet wird er in ops (Stadt → Adresse des Leads, Segment als Kontext). So gibt es genau **eine** Abbildung und nicht zwei, die auseinanderlaufen können. Wer die Stadt statt im Suchfeld über LinkedIns Standort-Filter setzt, hat sie folgerichtig nicht im Begriff. Ältere Protokoll-Einträge tragen das Feld noch nicht, aber die Such-URL, aus der es abgeleitet wird — Export und Sync beantworten sie deshalb rückwirkend mit.
 
 Die Karten-Felder sind Best-Effort: Ändert LinkedIn sein DOM, bleibt die betroffene Spalte leer — der Versand läuft unverändert weiter. Der Export liest direkt aus `chrome.storage` und funktioniert deshalb auch, wenn das Popup über einem Nicht-LinkedIn-Tab geöffnet wird. **Clear Log** löscht das Protokoll (zwei Klicks) und hebt damit auch die Duplikatsperre auf.
 
@@ -410,7 +414,7 @@ Alles liegt in `chrome.storage.local` — also im Chrome-Profil auf Ihrem Rechne
 ### Was den Browser verlässt
 
 - **An LinkedIn:** die Kontaktanfragen selbst (Voyager API) und der Vanity-Lookup — nichts anderes.
-- **An celox ops:** **nur wenn Sie einen Token hinterlegt haben.** Dann die Felder des Kontaktprotokolls (Name, Profil-URL, Headline, Firma, Ort, Kontaktgrad, Profil-ID, Sendeweg, Suchseite, Zeitpunkt) an den Host aus `lcOps.baseUrl` — und in Gegenrichtung die Sperrliste (nur Profil-Schlüssel). Der Token berechtigt in ops ausschließlich zum Import und zum Lesen dieser Liste.
+- **An celox ops:** **nur wenn Sie einen Token hinterlegt haben.** Dann die Felder des Kontaktprotokolls (Name, Profil-URL, Headline, Firma, Ort, Kontaktgrad, Profil-ID, Sendeweg, Suchbegriff, Suchseite, Zeitpunkt) an den Host aus `lcOps.baseUrl` — und in Gegenrichtung die Sperrliste (nur Profil-Schlüssel). Der Token berechtigt in ops ausschließlich zum Import und zum Lesen dieser Liste.
 - **An niemanden sonst.** Keine Telemetrie, keine Analytics, kein Update-Check, keine externen Assets in den Exporten.
 - Das Backup-JSON entfernt Session-Header (`csrf-token`, `cookie`, `authorization`) aus dem gespeicherten Recipe, bevor es die Datei schreibt.
 
@@ -456,13 +460,14 @@ npx vitest run test/lib.test.js          # eine Datei
 npx vitest run -t "buildInviteRequest"    # ein Test
 ```
 
-**489 Unit- und Integrationstests** mit Vitest + jsdom (Zeitzone in `vitest.config.js` auf `Europe/Berlin` gepinnt — die Kontingent- und Chart-Rechnung ist kalenderlokal, und der Fehler, den naive Millisekunden-Arithmetik erzeugt, existiert nur dort, wo die Uhren wirklich springen):
+**510 Unit- und Integrationstests** mit Vitest + jsdom (Zeitzone in `vitest.config.js` auf `Europe/Berlin` gepinnt — die Kontingent- und Chart-Rechnung ist kalenderlokal, und der Fehler, den naive Millisekunden-Arithmetik erzeugt, existiert nur dort, wo die Uhren wirklich springen):
 
 | Datei | Prüft |
 |---|---|
 | `test/lib.test.js` | Kernfunktionen, Self-Healing-Helfer (Recipe-Bau, Invite-Erkennung), Mehrsprachen-Erkennung |
 | `test/interceptor.test.js` | **lädt `interceptor.js` echt** in jsdom: mitgeschnittener `fetch`/XHR-Invite wird als Recipe gepostet, Fremdes nicht, nur POST, nur eigene Origin — und Paritätstest der Heuristik gegen `lib.js` (die Datei trägt sie doppelt, weil die MAIN-World `window.LC` nicht sieht) |
 | `test/export.test.js` | Namensschälung, Kartenextraktion, CSV-Erzeugung (Quoting, Injection-Schutz, BOM), Dateiname, Protokoll-Deckel |
+| `test/search-query.test.js` | Suchbegriff aus der Such-URL (Kodierungen, Fragment, Nicht-Suchseiten), Rückfall für Alt-Einträge, CSV-Spalte, ops-Feld, Backup-Rundlauf |
 | `test/stats.test.js` | Kontingent-Rechnung (Kalenderwoche, rollierende 7 Tage, Kappung), Bucket-Bildung je Zeitraum, DST-Nächte, SVG-Chart (Skalierung, laufende Spalte, Escaping, Leerzustand) |
 | `test/backup.test.js` | Backup-Format, Secret-Stripping, strenge Import-Validierung (fremde/kaputte/zu neue Dateien) |
 | `test/report.test.js` | HTML-Report: Eigenständigkeit (kein Skript, kein externer Verweis), Escaping gescrapter Namen, Kontingent-/Zeitraum-Angaben, Leerzustand |
@@ -527,6 +532,13 @@ löst `.github/workflows/release.yml` aus: Tests → ZIP → GitHub Release. Die
 | Deploy/Update kommt nicht an | Alte Extension-Version aus dem Cache | `chrome://extensions` → Aktualisieren, Tab neu laden; Version im Popup-Footer prüfen |
 
 ## Changelog
+
+### 2.13.0 — Suchbegriff im Protokoll
+
+- ✨ **Der Suchbegriff wird mitgeschrieben.** Wer „hausverwaltung Berlin" oder „CTO Frankfurt" sucht, hat damit Segment **und** Stadt am Kontakt — die Trefferkarte nennt den Ort oft nicht, und wo LinkedIn keinen hat, rutscht die Headline in die Ort-Zeile (in ops gemessen: 39 Leads mit einer Berufsbezeichnung als Adresse). Gelesen wird `?keywords=…` der Suchseite, gespeichert **unverändert** — gedeutet (Stadt, Segment) wird in ops, damit es eine Abbildung bleibt und nicht zwei
+- ✨ Neue CSV-Spalte **Suchbegriff** (vor „Suchseite"), neues ops-Feld `search_query`; im Backup enthalten
+- 🧠 **Rückwirkend ohne Migration:** ältere Einträge tragen das Feld nicht, aber die Such-URL, aus der es abgeleitet wird — Export und Sync beantworten sie deshalb mit. Wer bereits übertragene Leads nachträglich mit Stadt versorgen will, setzt auf der Optionsseite **Forget sync state** zurück; ops ist idempotent und ergänzt nur Leeres
+- 🧪 Neue Suite `test/search-query.test.js` (20), 7 Mutationsproben; die Spaltenzahl-Zusicherung zählt jetzt gegen die Spaltenliste statt gegen die feste 10
 
 ### 2.12.0 — Tempo-Deckel und Rückkanal aus ops
 
