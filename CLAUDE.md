@@ -247,3 +247,27 @@ SemVer. The user-facing version lives in `manifest.json` (currently **2.15.0**) 
 ⚠️ **An outcome can be reached by more than one mechanism — probe for that.** Two 2.9.1 probes survived at first: removing `clearInterval` still stopped the sends (because `active = false` already gates `tick`), and removing the `try/catch` in `storageSet` still warned (because the test's synchronous storage stub let the *outer* `storageGet` try/catch swallow it). Both assertions were true for the wrong reason. Fixes: assert `vi.getTimerCount()` drops, and break storage only **after** startup so the failing call is the one under test.
 
 ⚠️ **Mutate every new assertion once.** A test you have not watched fail is not a guarantee. This bit during v2.8.0: the "ignores duplicate visually-hidden text" test asserted only the name — which `firstLine` returns with or without dedupe, so removing the dedupe left it green. It is now anchored on the location column, which is what the dedupe actually buys.
+
+## Screenshots (2026-09-06)
+
+`tools/screenshots.mjs OUT_DIR` rendert die drei Oberflächen der Erweiterung
+reproduzierbar: `popup.html` und `options.html` als Kopien mit einem
+**chrome-Stub** davor (erfundene Daten, eingefrorene Uhr auf 2026-09-06 12:00,
+Version aus `package.json`), dazu `report.html` über das ausgelieferte
+`LC.reportHtml()` — das Bild zeigt also, was der Knopf wirklich schreibt.
+Rastern in einem echten Browser: `python3 -m http.server` im OUT_DIR, dann
+Element-Screenshots.
+
+- **Kein echter Kontakt, kein echter Token.** Jeder Name, jede Firma und jeder
+  Suchbegriff im Stub ist erfunden, die Profil-URLs enden auf `-demo`, das
+  ops-Token bleibt leer. Ein Bild darf keine gescrapte Person zeigen.
+- ⚠️ **Querformat ist Pflicht**, wenn die Bilder auf celox.io landen: die Bühne
+  dort setzt jedes HOCHFORMAT in einen Telefonrahmen (`b.h > b.w`). Deshalb
+  hängt das 300 px breite Popup in `popup-stage.html` an einer Leiste über
+  einer Seite (1000×640), und die Optionsseite wird unter der dritten Karte
+  geschnitten (940×892) statt über ihre vollen 3040 px.
+- ⚠️ Chromium malt seine **Scroll-Leiste** mit ins Bild — die Regel wird in alle
+  drei Seiten eingeschleust, auch in den generierten Report, und beim Aufnehmen
+  gilt `innerWidth - clientWidth === 0`.
+- Die Bilder liegen in `docs/screenshots/` und werden von celox.io über
+  `website/scripts/projekt-bilder.sh linkedin-spider` übernommen.
